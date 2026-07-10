@@ -64,6 +64,19 @@
   .toolbar .btn{width:auto;margin-top:0;padding:10px 22px}
   .btn.ghost{background:#fff;color:var(--blue-dark);border:1px solid var(--blue)}
   .btn.ghost:hover{background:var(--blue-light)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  /* location card */
+  .loc-grid{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  @media(max-width:720px){.loc-grid{grid-template-columns:1fr}}
+  select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font-size:.98rem;color:var(--ink);background:#fff}
+  select:focus{outline:2px solid var(--blue);border-color:var(--blue)}
+  input[type=text]{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font-size:1rem;color:var(--ink)}
+  input[type=text]:focus{outline:2px solid var(--blue);border-color:var(--blue)}
+  .region-badge{margin:14px 0 2px;padding:10px 14px;background:var(--blue-light);border:1px solid #c4d7ee;border-radius:8px;font-size:.95rem;color:var(--blue-dark)}
+  #depthTbl td.d{cursor:pointer}
+  #depthTbl td.d:hover{background:var(--blue-light)}
+  #depthTbl .use{border:1px solid var(--blue);background:#fff;color:var(--blue-dark);border-radius:6px;padding:3px 10px;font-size:.75rem;cursor:pointer}
+  #depthTbl .use:hover{background:var(--blue-light)}
 </style>
 </head>
 <body>
@@ -75,6 +88,47 @@
 </header>
 
 <main>
+  <div class="card full">
+    <h2>Location &amp; Design Rainfall — LaDOTD Table 3.4‑2 / Figure 3.4‑2</h2>
+    <div class="loc-grid">
+      <div>
+        <label>Louisiana Parish</label>
+        <select id="parishSel" onchange="parishChosen()"><option value="">— select a parish —</option></select>
+        <div style="text-align:center;color:var(--muted);font-size:.8rem;margin:8px 0">— or —</div>
+        <label>Coordinates <span class="u">(latitude, longitude — decimal degrees)</span></label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="coords" placeholder="e.g. 30.45, -91.15" onkeydown="if(event.key==='Enter')locate()">
+          <button class="btn" style="width:auto;margin:0;padding:0 18px" onclick="locate()">Locate</button>
+        </div>
+        <div class="msg err" id="locErr"></div>
+        <div class="region-badge" id="regionBadge">Region: <b>—</b></div>
+        <label>Rainfall Region (auto from location, or set manually)</label>
+        <select id="regionSel" onchange="regionChanged(true)">
+          <option value="">—</option>
+          <option value="1">Region 1 (south)</option>
+          <option value="2">Region 2 (north‑central)</option>
+          <option value="3">Region 3 (northwest)</option>
+        </select>
+        <label>Rainfall Duration</label>
+        <select id="durSel" onchange="regionChanged(false)">
+          <option value="6">6 hours</option>
+          <option value="12">12 hours</option>
+          <option value="24" selected>24 hours</option>
+        </select>
+        <div class="note">LaDOTD Hydraulics Manual §3‑B.8.3: for the NRCS method, use the <b>24‑hour</b> duration from Table 3.4‑2.</div>
+      </div>
+      <div>
+        <label style="margin-top:0">Rainfall depths for the selected region &amp; duration</label>
+        <table class="mid" id="depthTbl">
+          <thead><tr><th style="text-align:left;color:var(--blue-dark);font-size:.78rem">RETURN PERIOD</th><th style="text-align:right;color:var(--blue-dark);font-size:.78rem" id="depthHdr">DEPTH (in)</th><th></th></tr></thead>
+          <tbody id="depthBody"><tr><td colspan="3" style="color:var(--muted)">Select a parish, coordinates, or region…</td></tr></tbody>
+        </table>
+        <button class="btn ghost" style="margin-top:12px;width:100%" id="applyBtn" onclick="applyDepths()" disabled>Apply depths to the return‑period table below</button>
+        <div class="note">Click any depth to use it in the single calculator. “Use” fills the matching return‑period row below.</div>
+      </div>
+    </div>
+  </div>
+
   <div class="card">
     <h2>Watershed Inputs</h2>
     <div class="units">
@@ -123,8 +177,6 @@
       <tr><td>Unit‑hydrograph peak (484·A·1″/Tₚ)</td><td id="rQup">—</td></tr>
     </table>
     <div class="note" id="tcNote"></div>
-    <h2 style="margin-top:20px">Runoff Hydrograph (SCS Type II, 24‑hr storm)</h2>
-    <div id="chart"></div>
   </div>
 
   <div class="card full">
@@ -155,31 +207,7 @@
     </div>
   </div>
 
-  <details class="full">
-    <summary>Method &amp; equations (SCS / NRCS — TR‑55 Ch. 2 and LA DOTD Hydraulics Manual Ch. 1)</summary>
-    <p>This calculator reproduces the computation performed by LaDOTD program <b>HYDR1130</b> (hydr2009 package, rev. 1998‑07‑14). It is a small storm‑hydrograph model, not the TR‑55 Exhibit 4 “graphical peak discharge” chart, so results are the same as HYDR1130 but may differ slightly from TR‑55 chart solutions.</p>
-    <p><b>1. Runoff depth</b> — SCS runoff curve‑number method (TR‑55, eqs. 2‑1 to 2‑4):</p>
-    <div class="eq">S = 1000/CN − 10&nbsp;&nbsp;&nbsp;&nbsp;Iₐ = 0.2·S&nbsp;&nbsp;&nbsp;&nbsp;Q = (P − 0.2S)² / (P + 0.8S)&nbsp;&nbsp;for P &gt; Iₐ, else Q = 0</div>
-    <p><b>2. Time of concentration</b> — SCS watershed‑lag method (TR‑55 eq. 3‑4) with ℓ = hydraulic length (ft), Y = average watershed slope (%):</p>
-    <div class="eq">lag (hr) = ℓ<sup>0.8</sup> · (S + 1)<sup>0.7</sup> / (1900 · √Y)&nbsp;&nbsp;&nbsp;&nbsp;T꜀ = lag / 0.6</div>
-    <p><b>3. Storm distribution</b> — the 24‑hr design storm is distributed with the SCS <b>Type II</b> cumulative mass curve (the table embedded in HYDR1130), and incremental runoff is computed with the CN equation over unit periods of duration <b>D = T꜀/7.5</b>.</p>
-    <p><b>4. Unit hydrograph & convolution</b> — each unit period’s incremental runoff is routed with the SCS triangular unit hydrograph (peak factor 484, time to peak Tₚ = D/2 + 0.6·T꜀, recession 1.67·Tₚ, tabulated at 13 ordinates). The composite hydrograph is the sum of all increments; the reported value is its peak multiplied by the Peak Adjustment Factor Fₚ:</p>
-    <div class="eq">qₚ = Fₚ · max<sub>t</sub> Σ ΔQⱼ · UH(t − tⱼ)&nbsp;&nbsp;&nbsp;&nbsp;where the UH peak = 484 · A(mi²) · 1″ / Tₚ</div>
-    <p><b>Input limits enforced by HYDR1130</b> (mirrored here): drainage area ≤ 2,000 acres (800 ha), watershed slope 0.1 % – 30 %.</p>
-    <p><b>TR‑55 cautions</b> (Ch. 2): curve numbers describe <i>average</i> conditions for design use; the CN equation contains no time/intensity term; the Iₐ = 0.2S assumption was generalized from agricultural watersheds — use judgment in heavily urbanized cases.</p>
-  </details>
 
-  <details class="full">
-    <summary>Fidelity to HYDR1130</summary>
-    <p>This page is an independent re‑implementation of HYDR1130’s SCS routine, reverse‑engineered from the program and verified against <b>82 batch runs of the original executable</b> spanning drainage area 200–64,000 ac, length 200–70,800 ft, CN 40–95, rainfall 1–20 in, slope 0.1–30 % and Fₚ 0.5–100. All cases matched to the precision printed by the program (typically better than 0.01 %).</p>
-    <p>One quirk of the original program is reproduced intentionally: HYDR1130 searches for the hydrograph peak starting at the 12ᵗʰ ordinate of the composite hydrograph. For very long times of concentration (T꜀ ≳ 12.5 hr) the true hydrograph peak occurs earlier than that, so the program (and this page) reports a value slightly below the true computed peak. When this happens a note is shown beneath the results with the unclipped value.</p>
-  </details>
-
-  <details class="full">
-    <summary>Reference values (from HYDR1130 sample data)</summary>
-    <p>English sample (ENGLISHS.130): A = 100 ac, L = 4,000 ft, CN = 80, P = 10 in, slope 0.20 %, Fₚ = 1.00 → <b>qₚ = 146 cfs</b>.<br>
-    Metric sample (METRICS.130): A = 40.5 ha, L = 1,219.2 m, CN = 80, P = 254 mm, slope 0.20 %, Fₚ = 1.00 → <b>qₚ ≈ 4.15 m³/s</b>.</p>
-  </details>
 </main>
 
 <footer>
@@ -248,6 +276,7 @@ function setUnits(u){
   document.getElementById('buLen').textContent  = u==='E'?'(ft)':'(m)';
   document.getElementById('buRain').textContent = u==='E'?'(in)':'(mm)';
   document.getElementById('buQp').textContent   = u==='E'?'(cfs)':'(m³/s)';
+  if(typeof renderDepths==='function') renderDepths();
 }
 
 function fmt(x,d){return x.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});}
@@ -303,40 +332,6 @@ function run(){
     const tv=units==='E'?fmt(Math.round(r.qpTrue),0)+' cfs':fmt(r.qpTrue*CFS2CMS,2)+' m³/s';
     note.textContent='Note: because T꜀ is very long ('+fmt(r.Tc,1)+' hr), HYDR1130’s peak search clips the early hydrograph peak. The unclipped computed peak is '+tv+'. The value above matches the original program.';
   }else note.textContent='';
-
-  drawChart(r);
-}
-
-function drawChart(r){
-  const W=560,H=240,mL=52,mR=12,mT=10,mB=34;
-  const pts=r.hyd.filter(p=>p.t<=Math.min(60,r.hyd[r.hyd.length-1].t));
-  const tmax=Math.max(24,pts[pts.length-1].t), qmax=Math.max(...pts.map(p=>p.q))*1.08||1;
-  const X=t=>mL+(W-mL-mR)*t/tmax, Yp=q=>H-mB-(H-mT-mB)*q/qmax;
-  let path='M'+X(0)+','+Yp(0);
-  for(const p of pts) path+=' L'+X(p.t).toFixed(1)+','+Yp(p.q).toFixed(1);
-  const isM=units==='M', qconv=isM?CFS2CMS:1;
-  let ticksY='',n=4;
-  for(let i=0;i<=n;i++){
-    const q=qmax*i/n, y=Yp(q);
-    ticksY+='<line x1="'+mL+'" y1="'+y+'" x2="'+(W-mR)+'" y2="'+y+'" stroke="#e3ebf4"/>'
-          +'<text x="'+(mL-6)+'" y="'+(y+4)+'" text-anchor="end" font-size="10" fill="#5b6b7b">'+(q*qconv).toPrecision(3)+'</text>';
-  }
-  let ticksX='';
-  for(let t=0;t<=tmax;t+=6){
-    const x=X(t);
-    ticksX+='<line x1="'+x+'" y1="'+(H-mB)+'" x2="'+x+'" y2="'+(H-mB+4)+'" stroke="#9db2c8"/>'
-          +'<text x="'+x+'" y="'+(H-mB+16)+'" text-anchor="middle" font-size="10" fill="#5b6b7b">'+t+'</text>';
-  }
-  document.getElementById('chart').innerHTML=
-   '<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">'
-   +ticksY+ticksX
-   +'<line x1="'+mL+'" y1="'+(H-mB)+'" x2="'+(W-mR)+'" y2="'+(H-mB)+'" stroke="#9db2c8"/>'
-   +'<line x1="'+mL+'" y1="'+mT+'" x2="'+mL+'" y2="'+(H-mB)+'" stroke="#9db2c8"/>'
-   +'<path d="'+path+'" fill="none" stroke="#1b4f8a" stroke-width="2"/>'
-   +'<path d="'+path+' L'+X(pts[pts.length-1].t)+','+Yp(0)+' Z" fill="#1b4f8a" opacity="0.08"/>'
-   +'<text x="'+((mL+W-mR)/2)+'" y="'+(H-4)+'" text-anchor="middle" font-size="11" fill="#5b6b7b">time (hr)</text>'
-   +'<text x="12" y="'+((mT+H-mB)/2)+'" font-size="11" fill="#5b6b7b" transform="rotate(-90 12 '+((mT+H-mB)/2)+')" text-anchor="middle">q ('+(isM?'m³/s':'cfs')+')</text>'
-   +'</svg>';
 }
 
 /* ---------- batch table (multiple return periods / stations) ---------- */
@@ -429,6 +424,132 @@ function downloadCSV(){
   a.click();
   URL.revokeObjectURL(a.href);
 }
+/* ---------- LaDOTD Table 3.4-2: rainfall depths (inches) ---------- */
+const RP_LIST=[2,5,10,25,50,100];
+const DEPTHS={          /* [Region1, Region2, Region3] */
+  2:  {6:[3.5,3.0,2.8], 12:[4.1,3.6,3.2],  24:[4.8,4.0,3.6]},
+  5:  {6:[4.6,4.0,3.7], 12:[5.6,4.8,4.3],  24:[6.5,5.4,4.9]},
+  10: {6:[5.5,4.8,4.4], 12:[6.7,5.7,5.1],  24:[7.8,6.5,5.8]},
+  25: {6:[6.6,5.9,5.3], 12:[8.2,7.0,6.2],  24:[9.6,8.0,7.0]},
+  50: {6:[7.6,6.9,6.0], 12:[9.5,8.1,7.0],  24:[11.1,9.2,8.0]},
+  100:{6:[8.6,7.9,6.8], 12:[10.9,9.3,7.9], 24:[12.6,10.5,9.0]}
+};
+/* Parish outlines (US Census cartographic boundaries, simplified) with LaDOTD
+   rainfall region per Figure 3.4-2: [name, region, [flat rings lon,lat,...]] */
+const PARISH_GEO=[["Acadia",1,[[-92.285,30.147,-92.426,30.049,-92.535,30.108,-92.625,30.092,-92.591,30.182,-92.627,30.23,-92.632,30.481,-92.245,30.48,-92.176,30.437,-92.142,30.299,-92.285,30.147]]],["Allen",1,[[-92.597,30.584,-92.63,30.488,-92.722,30.488,-92.776,30.438,-93.066,30.439,-93.131,30.424,-93.13,30.598,-92.979,30.598,-92.978,30.878,-92.598,30.896,-92.597,30.584]]],["Ascension",1,[[-91.106,30.062,-91.021,30.321,-90.892,30.345,-90.69,30.177,-90.633,30.221,-90.642,30.166,-90.916,30.113,-90.964,30.066,-91.106,30.062]]],["Assumption",1,[[-91.224,30.025,-91.106,30.062,-90.964,30.066,-90.96,29.978,-90.886,29.905,-91.007,29.715,-91.083,29.626,-91.105,29.642,-91.093,29.802,-91.183,29.846,-91.255,29.971,-91.259,30.0,-91.236,30.001,-91.224,30.025]]],["Avoyelles",1,[[-91.815,30.848,-92.213,30.849,-92.281,30.965,-92.208,30.962,-92.234,31.131,-92.233,31.322,-92.087,31.335,-92.008,31.326,-91.995,31.23,-91.927,31.295,-91.834,31.266,-91.677,31.188,-91.75,31.019,-91.806,30.973,-91.815,30.848]]],["Beauregard",1,[[-93.742,30.403,-93.698,30.444,-93.71,30.506,-93.74,30.539,-93.728,30.574,-93.563,30.819,-93.555,30.877,-92.978,30.878,-92.979,30.598,-93.13,30.598,-93.131,30.403,-93.385,30.403,-93.385,30.49,-93.486,30.491,-93.486,30.402,-93.742,30.403]]],["Bienville",2,[[-93.428,32.236,-93.373,32.41,-93.237,32.41,-93.147,32.455,-93.179,32.585,-92.881,32.585,-92.879,32.454,-92.777,32.453,-92.775,32.237,-92.815,32.147,-93.187,32.148,-93.214,32.236,-93.428,32.236]]],["Bossier",3,[[-93.428,32.236,-93.471,32.237,-93.659,32.406,-93.686,32.395,-93.661,32.428,-93.7,32.497,-93.767,32.538,-93.739,32.591,-93.782,32.712,-93.819,32.736,-93.783,32.784,-93.824,32.792,-93.785,32.857,-93.843,32.947,-93.815,33.019,-93.521,33.019,-93.53,32.975,-93.448,32.866,-93.441,32.41,-93.373,32.41,-93.428,32.236]]],["Caddo",3,[[-94.043,32.693,-94.043,33.019,-93.815,33.019,-93.843,32.947,-93.785,32.857,-93.824,32.792,-93.783,32.784,-93.819,32.736,-93.782,32.712,-93.739,32.591,-93.767,32.538,-93.7,32.497,-93.661,32.428,-93.686,32.395,-93.659,32.406,-93.471,32.237,-93.615,32.238,-93.666,32.317,-93.791,32.34,-93.951,32.196,-94.043,32.196,-94.043,32.693]]],["Calcasieu",1,[[-93.722,30.051,-93.695,30.148,-93.712,30.194,-93.721,30.296,-93.766,30.333,-93.758,30.39,-93.742,30.403,-93.486,30.402,-93.486,30.491,-93.385,30.49,-93.385,30.403,-93.131,30.403,-93.031,30.379,-92.996,30.157,-92.893,30.156,-92.888,30.082,-92.996,30.038,-93.128,30.053,-93.722,30.051]]],["Caldwell",2,[[-92.313,31.927,-92.312,32.277,-92.034,32.277,-91.98,32.166,-91.895,32.152,-91.89,31.971,-91.904,31.928,-92.313,31.927]]],["Cameron",1,[[-93.841,29.914,-93.789,29.988,-93.722,30.051,-93.128,30.053,-92.996,30.038,-92.616,30.038,-92.618,29.579,-92.744,29.618,-92.974,29.714,-93.227,29.778,-93.347,29.759,-93.475,29.769,-93.684,29.747,-93.766,29.73,-93.838,29.691,-93.898,29.772,-93.891,29.843,-93.841,29.914]]],["Catahoula",1,[[-92.008,31.326,-92.005,31.927,-91.904,31.928,-91.89,31.971,-91.805,31.893,-91.729,31.883,-91.647,31.97,-91.597,31.97,-91.545,31.752,-91.602,31.762,-91.694,31.735,-91.706,31.643,-91.776,31.649,-91.824,31.6,-91.738,31.432,-91.807,31.439,-91.857,31.495,-91.856,31.424,-91.777,31.385,-91.845,31.376,-91.862,31.302,-91.834,31.266,-91.927,31.295,-91.995,31.23,-92.008,31.326]]],["Claiborne",3,[[-92.881,32.585,-93.179,32.585,-93.187,32.717,-93.237,32.716,-93.239,33.018,-92.725,33.014,-92.725,32.76,-92.829,32.759,-92.881,32.585]]],["Concordia",1,[[-91.38,31.733,-91.398,31.709,-91.405,31.638,-91.465,31.629,-91.478,31.611,-91.471,31.586,-91.425,31.578,-91.417,31.562,-91.45,31.54,-91.511,31.533,-91.523,31.52,-91.5,31.419,-91.541,31.357,-91.509,31.292,-91.522,31.273,-91.574,31.261,-91.598,31.205,-91.604,31.155,-91.562,31.043,-91.585,31.02,-91.637,30.999,-91.663,30.97,-91.75,31.019,-91.677,31.188,-91.834,31.266,-91.862,31.302,-91.845,31.376,-91.777,31.385,-91.856,31.424,-91.857,31.495,-91.807,31.439,-91.738,31.432,-91.824,31.6,-91.776,31.649,-91.706,31.643,-91.694,31.735,-91.602,31.762,-91.38,31.733]]],["De Soto",3,[[-94.016,31.98,-94.043,31.999,-94.043,32.196,-93.951,32.196,-93.791,32.34,-93.666,32.317,-93.615,32.238,-93.536,32.193,-93.541,32.106,-93.442,31.989,-93.355,31.932,-93.441,31.914,-93.441,31.845,-93.878,31.844,-93.975,31.924,-94.016,31.98]]],["East Baton Rouge",1,[[-91.021,30.321,-91.142,30.32,-91.242,30.358,-91.197,30.507,-91.263,30.505,-91.298,30.65,-91.254,30.705,-90.849,30.719,-90.981,30.59,-90.992,30.462,-90.892,30.345,-91.021,30.321]]],["East Carroll",2,[[-91.091,32.564,-91.134,32.538,-91.458,32.538,-91.431,32.561,-91.445,32.582,-91.345,32.757,-91.309,32.935,-91.265,33.005,-91.166,33.004,-91.214,32.93,-91.197,32.907,-91.145,32.905,-91.132,32.923,-91.134,32.981,-91.107,32.989,-91.087,32.976,-91.064,32.924,-91.071,32.889,-91.145,32.843,-91.164,32.786,-91.163,32.747,-91.054,32.722,-91.064,32.703,-91.152,32.642,-91.141,32.597,-91.104,32.585,-91.091,32.564]]],["East Feliciana",1,[[-90.826,30.999,-90.863,30.942,-90.849,30.719,-91.254,30.705,-91.298,30.65,-91.309,30.652,-91.321,30.699,-91.236,30.795,-91.176,30.999,-90.826,30.999]]],["Evangeline",1,[[-92.63,30.488,-92.597,30.584,-92.598,30.896,-92.509,30.896,-92.48,30.952,-92.383,31.001,-92.281,30.965,-92.213,30.849,-92.173,30.713,-92.211,30.568,-92.263,30.539,-92.421,30.539,-92.493,30.48,-92.63,30.488]]],["Franklin",2,[[-91.576,31.883,-91.597,31.97,-91.647,31.97,-91.729,31.883,-91.805,31.893,-91.89,31.971,-91.895,32.152,-91.775,32.243,-91.764,32.33,-91.635,32.405,-91.477,32.406,-91.527,32.301,-91.493,32.203,-91.49,32.092,-91.576,31.883]]],["Grant",2,[[-92.974,31.709,-92.62,31.71,-92.619,31.797,-92.363,31.797,-92.348,31.697,-92.384,31.62,-92.307,31.59,-92.266,31.493,-92.196,31.478,-92.632,31.39,-92.695,31.407,-92.719,31.518,-92.806,31.599,-92.908,31.625,-92.974,31.709]]],["Iberia",1,[[-92.0,29.613,-91.94,29.61,-91.923,29.633,-91.863,29.634,-91.785,29.595,-91.775,29.576,-91.709,29.561,-91.765,29.521,-91.771,29.489,-91.822,29.474,-91.862,29.502,-92.027,29.567,-92.041,29.582,-92.0,29.613],[-91.369,30.059,-91.224,30.025,-91.236,30.001,-91.259,30.0,-91.255,29.971,-91.625,29.945,-91.711,29.846,-91.876,29.722,-91.878,29.751,-91.855,29.807,-91.87,29.828,-91.889,29.836,-91.916,29.816,-91.97,29.804,-91.99,29.97,-91.951,30.073,-91.819,30.044,-91.765,30.108,-91.659,30.108,-91.6,30.033,-91.369,30.059]]],["Iberville",1,[[-91.475,30.229,-91.563,30.242,-91.621,30.31,-91.64,30.443,-91.701,30.497,-91.485,30.497,-91.312,30.322,-91.021,30.321,-91.106,30.062,-91.224,30.025,-91.369,30.059,-91.464,30.102,-91.475,30.229]]],["Jackson",2,[[-92.312,32.277,-92.312,32.146,-92.815,32.147,-92.775,32.237,-92.777,32.453,-92.622,32.453,-92.622,32.496,-92.415,32.495,-92.415,32.408,-92.312,32.321,-92.312,32.277]]],["Jefferson",1,[[-90.228,29.692,-90.173,29.828,-90.24,29.862,-90.28,29.968,-90.278,30.231,-90.105,30.192,-90.125,29.976,-90.14,29.948,-90.059,29.945,-90.008,29.896,-90.076,29.772,-89.98,29.608,-89.962,29.433,-89.992,29.464,-90.013,29.463,-90.029,29.432,-90.138,29.477,-90.186,29.563,-90.156,29.678,-90.228,29.692]]],["Jefferson Davis",1,[[-93.131,30.424,-93.066,30.439,-92.776,30.438,-92.722,30.488,-92.63,30.488,-92.627,30.23,-92.591,30.182,-92.625,30.092,-92.739,30.037,-92.996,30.038,-92.888,30.082,-92.893,30.156,-92.996,30.157,-93.031,30.379,-93.131,30.403,-93.131,30.424]]],["La Salle",2,[[-92.196,31.478,-92.266,31.493,-92.307,31.59,-92.384,31.62,-92.348,31.697,-92.363,31.797,-92.313,31.927,-92.005,31.927,-92.008,31.326,-92.087,31.335,-92.196,31.478]]],["Lafayette",1,[[-92.285,30.147,-92.056,30.378,-91.989,30.369,-91.943,30.237,-91.98,30.185,-91.906,30.155,-91.964,30.037,-92.128,30.116,-92.285,30.147]]],["Lafourche",1,[[-90.029,29.432,-90.034,29.323,-90.01,29.295,-90.02,29.282,-90.057,29.281,-90.071,29.263,-90.101,29.26,-90.096,29.241,-90.073,29.227,-90.071,29.209,-90.043,29.212,-89.96,29.268,-89.95,29.263,-89.956,29.254,-90.174,29.105,-90.349,29.058,-90.326,29.075,-90.253,29.094,-90.25,29.108,-90.234,29.11,-90.234,29.129,-90.281,29.143,-90.303,29.175,-90.301,29.196,-90.276,29.194,-90.271,29.205,-90.312,29.238,-90.312,29.256,-90.333,29.277,-90.367,29.274,-90.388,29.253,-90.384,29.236,-90.409,29.196,-90.377,29.303,-90.384,29.366,-90.575,29.559,-90.767,29.695,-90.808,29.776,-90.88,29.717,-91.007,29.715,-90.886,29.905,-90.786,29.922,-90.656,29.889,-90.542,29.892,-90.475,29.812,-90.372,29.759,-90.346,29.693,-90.228,29.692,-90.156,29.678,-90.186,29.563,-90.138,29.477,-90.029,29.432]]],["Lincoln",2,[[-92.415,32.583,-92.415,32.495,-92.622,32.496,-92.622,32.453,-92.879,32.454,-92.881,32.585,-92.829,32.759,-92.571,32.749,-92.518,32.671,-92.415,32.67,-92.415,32.583]]],["Livingston",1,[[-90.775,30.25,-90.892,30.345,-90.992,30.462,-90.981,30.59,-90.911,30.649,-90.567,30.65,-90.546,30.43,-90.401,30.286,-90.498,30.256,-90.559,30.194,-90.633,30.221,-90.69,30.177,-90.775,30.25]]],["Madison",2,[[-91.091,32.563,-91.117,32.5,-91.109,32.472,-90.994,32.404,-91.0,32.358,-90.899,32.329,-91.005,32.215,-91.039,32.242,-91.123,32.217,-91.134,32.249,-91.321,32.202,-91.493,32.203,-91.527,32.301,-91.477,32.406,-91.458,32.538,-91.134,32.538,-91.091,32.563]]],["Morehouse",2,[[-91.913,32.506,-91.911,32.661,-92.065,32.723,-92.069,33.008,-91.436,33.006,-91.512,32.879,-91.566,32.856,-91.638,32.667,-91.742,32.559,-91.804,32.571,-91.913,32.506]]],["Natchitoches",2,[[-93.441,31.845,-93.441,31.914,-93.355,31.932,-93.24,31.904,-93.238,31.973,-93.123,31.973,-93.187,32.148,-92.939,32.148,-92.872,31.946,-92.967,31.781,-92.974,31.709,-92.908,31.625,-92.806,31.599,-92.719,31.518,-92.913,31.368,-92.981,31.347,-93.236,31.365,-93.237,31.538,-93.337,31.538,-93.339,31.714,-93.442,31.714,-93.441,31.845]]],["Orleans",1,[[-90.125,29.976,-90.105,30.192,-89.994,30.15,-89.879,30.199,-89.794,30.151,-89.749,30.176,-89.623,30.152,-89.678,30.108,-89.684,30.076,-89.727,30.063,-89.716,30.028,-89.725,30.022,-89.763,30.042,-89.819,30.043,-89.855,30.008,-89.99,29.989,-90.012,29.946,-89.921,29.916,-89.911,29.869,-90.008,29.896,-90.059,29.945,-90.14,29.948,-90.125,29.976]]],["Ouachita",2,[[-92.065,32.723,-91.911,32.661,-91.913,32.506,-92.004,32.38,-92.034,32.277,-92.312,32.277,-92.312,32.321,-92.415,32.408,-92.415,32.583,-92.272,32.581,-92.065,32.723]]],["Plaquemines",1,[[-89.911,29.869,-89.87,29.795,-89.721,29.758,-89.628,29.681,-89.519,29.649,-89.487,29.621,-89.535,29.649,-89.621,29.657,-89.65,29.673,-89.647,29.625,-89.684,29.625,-89.688,29.615,-89.669,29.58,-89.684,29.563,-89.681,29.534,-89.701,29.521,-89.694,29.509,-89.666,29.49,-89.635,29.489,-89.59,29.438,-89.577,29.434,-89.549,29.466,-89.528,29.455,-89.532,29.426,-89.509,29.386,-89.477,29.411,-89.457,29.393,-89.34,29.381,-89.351,29.35,-89.323,29.344,-89.283,29.356,-89.241,29.31,-89.224,29.314,-89.201,29.348,-89.189,29.345,-89.165,29.303,-89.1,29.25,-89.101,29.206,-89.022,29.218,-89.001,29.18,-89.005,29.165,-89.024,29.17,-89.047,29.158,-89.024,29.134,-89.052,29.107,-89.062,29.07,-89.122,29.069,-89.17,29.009,-89.211,29.041,-89.226,29.079,-89.255,29.083,-89.259,29.058,-89.315,29.039,-89.325,29.014,-89.338,29.013,-89.411,28.925,-89.42,28.93,-89.408,28.965,-89.375,28.985,-89.335,29.04,-89.355,29.073,-89.406,29.087,-89.409,29.128,-89.472,29.208,-89.607,29.252,-89.697,29.297,-89.85,29.312,-89.854,29.341,-89.817,29.384,-89.826,29.416,-89.844,29.422,-89.834,29.47,-89.863,29.476,-89.902,29.46,-89.933,29.429,-89.962,29.433,-89.98,29.608,-90.076,29.772,-90.008,29.896,-89.911,29.869]]],["Pointe Coupee",1,[[-91.415,30.535,-91.485,30.497,-91.756,30.498,-91.734,30.702,-91.815,30.848,-91.806,30.973,-91.75,31.019,-91.663,30.97,-91.661,30.857,-91.516,30.861,-91.553,30.731,-91.381,30.759,-91.353,30.722,-91.331,30.659,-91.415,30.535]]],["Rapides",1,[[-92.598,30.896,-92.824,30.89,-92.83,31.252,-92.88,31.317,-92.981,31.347,-92.913,31.368,-92.719,31.518,-92.695,31.407,-92.632,31.39,-92.196,31.478,-92.087,31.335,-92.233,31.322,-92.234,31.131,-92.208,30.962,-92.281,30.965,-92.383,31.001,-92.48,30.952,-92.509,30.896,-92.598,30.896]]],["Red River",2,[[-93.615,32.238,-93.214,32.236,-93.123,31.973,-93.238,31.973,-93.24,31.904,-93.355,31.932,-93.442,31.989,-93.541,32.106,-93.536,32.193,-93.615,32.238]]],["Richland",2,[[-91.477,32.406,-91.635,32.405,-91.764,32.33,-91.775,32.243,-91.895,32.152,-91.98,32.166,-92.034,32.277,-92.004,32.38,-91.913,32.506,-91.804,32.571,-91.742,32.559,-91.638,32.667,-91.596,32.582,-91.445,32.582,-91.431,32.561,-91.458,32.538,-91.477,32.406]]],["Sabine",2,[[-93.819,31.555,-93.835,31.586,-93.812,31.715,-93.84,31.801,-93.878,31.844,-93.441,31.845,-93.442,31.714,-93.339,31.714,-93.337,31.538,-93.237,31.538,-93.236,31.365,-93.39,31.364,-93.443,31.277,-93.535,31.277,-93.553,31.186,-93.589,31.166,-93.602,31.182,-93.621,31.271,-93.672,31.3,-93.641,31.373,-93.696,31.409,-93.73,31.488,-93.819,31.555]]],["St. Bernard",1,[[-89.911,29.869,-89.921,29.916,-90.012,29.946,-89.99,29.989,-89.855,30.008,-89.844,29.956,-89.829,29.939,-89.775,29.937,-89.728,29.959,-89.713,29.946,-89.743,29.936,-89.742,29.908,-89.692,29.869,-89.638,29.864,-89.598,29.881,-89.591,29.897,-89.575,29.959,-89.581,29.995,-89.502,30.034,-89.482,30.079,-89.418,30.05,-89.372,30.055,-89.372,30.037,-89.423,30.015,-89.433,29.991,-89.433,29.979,-89.379,29.964,-89.379,29.92,-89.368,29.911,-89.315,29.923,-89.273,29.994,-89.251,30.002,-89.25,29.976,-89.218,29.973,-89.231,29.925,-89.28,29.925,-89.322,29.887,-89.241,29.89,-89.236,29.877,-89.27,29.86,-89.384,29.839,-89.346,29.82,-89.332,29.791,-89.277,29.808,-89.285,29.77,-89.271,29.756,-89.305,29.757,-89.338,29.779,-89.367,29.775,-89.386,29.789,-89.428,29.742,-89.424,29.698,-89.53,29.744,-89.56,29.735,-89.573,29.747,-89.651,29.749,-89.645,29.711,-89.593,29.702,-89.597,29.684,-89.574,29.674,-89.534,29.67,-89.487,29.621,-89.519,29.649,-89.628,29.681,-89.721,29.758,-89.87,29.795,-89.911,29.869],[-88.865,29.753,-88.944,29.659,-88.874,29.758,-88.831,29.879,-88.841,29.996,-88.881,30.053,-88.841,30.013,-88.817,29.934,-88.827,29.847,-88.865,29.753]]],["St. Charles",1,[[-90.173,29.828,-90.228,29.692,-90.346,29.693,-90.372,29.759,-90.475,29.812,-90.542,29.892,-90.538,30.017,-90.449,30.033,-90.278,30.231,-90.28,29.968,-90.24,29.862,-90.173,29.828]]],["St. Helena",1,[[-90.826,30.999,-90.567,31.0,-90.567,30.65,-90.911,30.649,-90.849,30.719,-90.863,30.942,-90.826,30.999]]],["St. James",1,[[-90.964,30.066,-90.916,30.113,-90.642,30.166,-90.689,30.036,-90.656,29.889,-90.786,29.922,-90.886,29.905,-90.96,29.978,-90.964,30.066]]],["St. John the Baptist",1,[[-90.642,30.166,-90.633,30.221,-90.559,30.194,-90.498,30.256,-90.401,30.286,-90.297,30.294,-90.278,30.231,-90.449,30.033,-90.538,30.017,-90.542,29.892,-90.656,29.889,-90.689,30.036,-90.642,30.166]]],["St. Landry",1,[[-92.493,30.48,-92.421,30.539,-92.263,30.539,-92.211,30.568,-92.173,30.713,-92.213,30.849,-91.815,30.848,-91.734,30.702,-91.756,30.498,-91.679,30.395,-91.869,30.417,-91.989,30.369,-92.056,30.378,-92.142,30.299,-92.176,30.437,-92.245,30.48,-92.493,30.48]]],["St. Martin",1,[[-91.472,29.956,-91.255,29.971,-91.183,29.846,-91.093,29.802,-91.1,29.699,-91.215,29.751,-91.386,29.784,-91.374,29.834,-91.472,29.956],[-91.701,30.497,-91.64,30.443,-91.621,30.31,-91.563,30.242,-91.475,30.229,-91.464,30.102,-91.369,30.059,-91.6,30.033,-91.659,30.108,-91.765,30.108,-91.819,30.044,-91.951,30.073,-91.906,30.155,-91.98,30.185,-91.943,30.237,-91.989,30.369,-91.869,30.417,-91.679,30.395,-91.756,30.498,-91.701,30.497]]],["St. Mary",1,[[-91.083,29.626,-91.178,29.61,-91.261,29.545,-91.266,29.472,-91.336,29.486,-91.357,29.515,-91.42,29.516,-91.447,29.545,-91.531,29.532,-91.526,29.552,-91.554,29.633,-91.649,29.634,-91.627,29.662,-91.618,29.711,-91.633,29.743,-91.752,29.748,-91.859,29.703,-91.881,29.713,-91.711,29.846,-91.625,29.945,-91.472,29.956,-91.374,29.834,-91.386,29.784,-91.215,29.751,-91.1,29.699,-91.105,29.642,-91.083,29.626]]],["St. Tammany",1,[[-89.691,30.459,-89.63,30.339,-89.643,30.288,-89.608,30.217,-89.573,30.181,-89.525,30.181,-89.537,30.172,-89.595,30.15,-89.749,30.176,-89.794,30.151,-89.879,30.199,-89.994,30.15,-90.105,30.192,-90.243,30.224,-90.256,30.712,-89.994,30.665,-89.843,30.666,-89.807,30.572,-89.761,30.516,-89.691,30.459]]],["Tangipahoa",1,[[-90.369,31.0,-90.347,31.0,-90.256,30.712,-90.243,30.224,-90.278,30.231,-90.297,30.294,-90.401,30.286,-90.546,30.43,-90.567,30.65,-90.567,31.0,-90.369,31.0]]],["Tensas",1,[[-91.028,32.113,-91.128,31.986,-91.248,31.87,-91.338,31.851,-91.38,31.733,-91.545,31.752,-91.576,31.883,-91.49,32.092,-91.493,32.203,-91.321,32.202,-91.134,32.249,-91.123,32.217,-91.164,32.197,-91.175,32.155,-91.165,32.134,-91.131,32.126,-91.047,32.139,-91.03,32.13,-91.028,32.113]]],["Terrebonne",1,[[-91.007,29.715,-90.88,29.717,-90.808,29.776,-90.767,29.695,-90.575,29.559,-90.384,29.366,-90.377,29.303,-90.409,29.196,-90.472,29.193,-90.467,29.203,-90.495,29.217,-90.468,29.228,-90.452,29.266,-90.511,29.291,-90.526,29.276,-90.565,29.285,-90.583,29.276,-90.59,29.249,-90.545,29.231,-90.561,29.204,-90.634,29.209,-90.647,29.129,-90.764,29.113,-90.799,29.087,-90.804,29.064,-90.765,29.049,-90.725,29.067,-90.637,29.067,-90.731,29.042,-90.811,29.037,-90.839,29.039,-90.863,29.095,-90.961,29.181,-91.0,29.169,-91.094,29.188,-91.129,29.216,-91.219,29.226,-91.303,29.266,-91.333,29.306,-91.292,29.311,-91.27,29.357,-91.249,29.37,-91.207,29.361,-91.197,29.37,-91.218,29.407,-91.217,29.433,-91.258,29.447,-91.261,29.545,-91.178,29.61,-91.083,29.626,-91.007,29.715]]],["Union",2,[[-92.065,32.723,-92.272,32.581,-92.415,32.583,-92.415,32.67,-92.518,32.671,-92.571,32.749,-92.725,32.76,-92.725,33.014,-92.069,33.008,-92.065,32.723]]],["Vermilion",1,[[-92.041,29.582,-92.159,29.582,-92.252,29.539,-92.309,29.533,-92.618,29.579,-92.616,30.038,-92.739,30.037,-92.625,30.092,-92.535,30.108,-92.426,30.049,-92.285,30.147,-92.128,30.116,-91.964,30.037,-91.99,29.97,-91.97,29.804,-92.107,29.744,-92.144,29.716,-92.149,29.697,-92.112,29.622,-92.025,29.626,-92.0,29.613,-92.041,29.582]]],["Vernon",2,[[-93.555,30.877,-93.531,30.925,-93.54,31.008,-93.528,31.075,-93.532,31.181,-93.553,31.186,-93.535,31.277,-93.443,31.277,-93.39,31.364,-92.981,31.347,-92.88,31.317,-92.83,31.252,-92.824,30.89,-92.978,30.878,-93.555,30.877]]],["Washington",1,[[-90.347,31.0,-89.733,31.005,-89.728,30.971,-89.745,30.919,-89.773,30.898,-89.843,30.666,-89.994,30.665,-90.256,30.712,-90.347,31.0]]],["Webster",3,[[-93.373,32.41,-93.441,32.41,-93.448,32.866,-93.53,32.975,-93.521,33.019,-93.239,33.018,-93.237,32.716,-93.187,32.717,-93.179,32.585,-93.147,32.455,-93.237,32.41,-93.373,32.41]]],["West Baton Rouge",1,[[-91.415,30.535,-91.331,30.659,-91.298,30.65,-91.263,30.505,-91.197,30.507,-91.242,30.358,-91.142,30.323,-91.312,30.322,-91.485,30.497,-91.415,30.535]]],["West Carroll",2,[[-91.265,33.005,-91.309,32.935,-91.345,32.757,-91.445,32.582,-91.596,32.582,-91.638,32.667,-91.566,32.856,-91.512,32.879,-91.436,33.006,-91.265,33.005]]],["West Feliciana",1,[[-91.331,30.659,-91.353,30.722,-91.381,30.759,-91.553,30.731,-91.516,30.861,-91.661,30.857,-91.663,30.97,-91.641,30.996,-91.176,30.999,-91.236,30.795,-91.321,30.699,-91.31,30.654,-91.331,30.659]]],["Winn",2,[[-92.363,31.797,-92.619,31.797,-92.62,31.71,-92.974,31.709,-92.967,31.781,-92.872,31.946,-92.939,32.148,-92.312,32.146,-92.313,31.927,-92.363,31.797]]]];
+
+(function(){
+  const sel=document.getElementById('parishSel');
+  PARISH_GEO.forEach((p,i)=>{
+    const o=document.createElement('option');
+    o.value=i; o.textContent=p[0]+' Parish';
+    sel.appendChild(o);
+  });
+})();
+
+function pointInRing(lon,lat,f){
+  let inside=false;
+  const n=f.length/2;
+  for(let i=0,j=n-1;i<n;j=i++){
+    const xi=f[2*i],yi=f[2*i+1],xj=f[2*j],yj=f[2*j+1];
+    if((yi>lat)!==(yj>lat) && lon<(xj-xi)*(lat-yi)/(yj-yi)+xi) inside=!inside;
+  }
+  return inside;
+}
+function findParish(lon,lat){
+  for(let i=0;i<PARISH_GEO.length;i++){
+    if(PARISH_GEO[i][2].some(r=>pointInRing(lon,lat,r))) return {i,exact:true};
+  }
+  /* not inside any polygon: nearest vertex within ~0.2 deg (rivers/coast/simplification) */
+  let best=1e9,bi=-1;
+  PARISH_GEO.forEach((p,i)=>p[2].forEach(f=>{
+    for(let k=0;k<f.length;k+=2){
+      const d=(f[k]-lon)*(f[k]-lon)+(f[k+1]-lat)*(f[k+1]-lat);
+      if(d<best){best=d;bi=i;}
+    }
+  }));
+  return Math.sqrt(best)<=0.2?{i:bi,exact:false}:null;
+}
+
+function setRegion(region,label){
+  document.getElementById('regionSel').value=String(region);
+  const b=document.getElementById('regionBadge');
+  b.innerHTML='Region: <b>'+['','1','2','3'][region]+'</b>'+(label?' — '+label:'');
+  renderDepths();
+}
+function parishChosen(){
+  document.getElementById('locErr').style.display='none';
+  document.getElementById('coords').value='';
+  const i=document.getElementById('parishSel').value;
+  if(i==='')return;
+  const p=PARISH_GEO[+i];
+  setRegion(p[1],p[0]+' Parish');
+}
+function locate(){
+  const err=document.getElementById('locErr');
+  err.style.display='none';
+  const m=document.getElementById('coords').value.trim().match(/(-?\d+(?:\.\d+)?)[ ,;\t]+(-?\d+(?:\.\d+)?)/);
+  if(!m){err.textContent='Enter coordinates as: latitude, longitude (e.g. 30.45, -91.15)';err.style.display='block';return;}
+  let lat=parseFloat(m[1]), lon=parseFloat(m[2]);
+  if(Math.abs(lat)>Math.abs(lon)){const t=lat;lat=lon;lon=t;}       /* order mix-up */
+  if(lon>0&&lon>88&&lon<95) lon=-lon;                               /* west positive */
+  if(lat<28.5||lat>33.5||lon<-94.5||lon>-88.5){err.textContent='Those coordinates are outside Louisiana (lat 28.5–33.5, lon −94.5 to −88.5).';err.style.display='block';return;}
+  const hit=findParish(lon,lat);
+  if(!hit){err.textContent='Point not found inside any Louisiana parish.';err.style.display='block';return;}
+  const p=PARISH_GEO[hit.i];
+  document.getElementById('parishSel').value=String(hit.i);
+  setRegion(p[1],p[0]+' Parish'+(hit.exact?'':' (nearest)'));
+}
+function regionChanged(manual){
+  if(manual){
+    document.getElementById('regionBadge').innerHTML='Region: <b>'+(document.getElementById('regionSel').value||'—')+'</b> — set manually';
+    document.getElementById('parishSel').value='';
+  }
+  renderDepths();
+}
+function depthIn(rp){
+  const reg=+document.getElementById('regionSel').value;
+  const dur=+document.getElementById('durSel').value;
+  return reg?DEPTHS[rp][dur][reg-1]:null;
+}
+function renderDepths(){
+  const body=document.getElementById('depthBody');
+  const reg=+document.getElementById('regionSel').value;
+  document.getElementById('depthHdr').textContent='DEPTH '+(units==='E'?'(in)':'(mm)');
+  document.getElementById('applyBtn').disabled=!reg;
+  if(!reg){body.innerHTML='<tr><td colspan="3" style="color:var(--muted)">Select a parish, coordinates, or region…</td></tr>';return;}
+  body.innerHTML=RP_LIST.map(rp=>{
+    const d=depthIn(rp), disp=units==='E'?d.toFixed(1):(d*25.4).toFixed(0);
+    return '<tr><td>'+rp+'-yr</td>'
+      +'<td class="d" title="Click to use in the calculator" onclick="useInCalc('+rp+')">'+disp+'</td>'
+      +'<td style="text-align:right;border-bottom:1px solid var(--blue-light)"><button class="use" onclick="useInRow('+rp+')">Use in '+rp+'-yr row</button></td></tr>';
+  }).join('');
+}
+function depthDisplay(rp){
+  const d=depthIn(rp);
+  return units==='E'?+d.toFixed(1):+(d*25.4).toFixed(0);
+}
+function useInCalc(rp){
+  document.getElementById('rain').value=depthDisplay(rp);
+  run();
+}
+function rowsForRP(rp){
+  return Array.from(document.querySelectorAll('#batchBody tr')).filter(tr=>{
+    const m=tr.querySelector('.b-label').value.match(/^\s*(\d+)/);
+    return m&&+m[1]===rp;
+  });
+}
+function useInRow(rp){
+  let rows=rowsForRP(rp);
+  if(rows.length===0) rows=[addRow({label:rp+'-yr',area:document.getElementById('area').value,
+    len:document.getElementById('length').value,cn:document.getElementById('cn').value,rain:'',
+    slope:document.getElementById('slope').value,fp:document.getElementById('factor').value})];
+  rows.forEach(tr=>{tr.querySelector('.b-rain').value=depthDisplay(rp);computeRow(tr);});
+}
+function applyDepths(){
+  RP_LIST.forEach(useInRow);
+}
+
 /* seed the table with common return periods, copying the calculator inputs */
 (function(){
   const base={area:document.getElementById('area').value,
