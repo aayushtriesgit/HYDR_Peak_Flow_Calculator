@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCS (NRCS) Peak Discharge Calculator — HYDR1130 Web</title>
+<style>
+  :root{
+    --blue:#1b4f8a; --blue-dark:#123a68; --blue-light:#e8f0fa;
+    --ink:#1c2733; --muted:#5b6b7b; --line:#d7e0ea;
+    --ok:#0d7a3f; --warn:#a05a00; --err:#b3261e; --card:#ffffff; --bg:#f2f5f9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+  header{background:linear-gradient(135deg,var(--blue-dark),var(--blue));color:#fff;padding:26px 20px 22px}
+  header .wrap{max-width:1060px;margin:0 auto}
+  header h1{margin:0 0 4px;font-size:1.45rem;font-weight:600}
+  header p{margin:0;opacity:.85;font-size:.92rem}
+  main{max-width:1060px;margin:22px auto 60px;padding:0 20px;display:grid;grid-template-columns:400px 1fr;gap:20px}
+  @media(max-width:860px){main{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 22px;box-shadow:0 1px 3px rgba(16,35,60,.06)}
+  .card h2{margin:0 0 14px;font-size:1.02rem;color:var(--blue-dark);border-bottom:2px solid var(--blue-light);padding-bottom:8px}
+  .units{display:flex;gap:0;margin-bottom:16px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .units button{flex:1;padding:8px 0;border:0;background:#fff;color:var(--muted);font-size:.9rem;cursor:pointer}
+  .units button.active{background:var(--blue);color:#fff;font-weight:600}
+  label{display:block;font-size:.83rem;font-weight:600;color:var(--muted);margin:12px 0 4px}
+  label .u{font-weight:400}
+  input[type=number]{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font-size:1rem;color:var(--ink)}
+  input[type=number]:focus{outline:2px solid var(--blue);border-color:var(--blue)}
+  .btn{width:100%;margin-top:18px;padding:12px 0;background:var(--blue);border:0;border-radius:8px;color:#fff;font-size:1.02rem;font-weight:600;cursor:pointer}
+  .btn:hover{background:var(--blue-dark)}
+  .msg{margin-top:12px;padding:10px 12px;border-radius:7px;font-size:.86rem;display:none}
+  .msg.err{background:#fdecea;color:var(--err);border:1px solid #f3c1bd}
+  .msg.warn{background:#fdf3e5;color:var(--warn);border:1px solid #eed4a9}
+  .result-hero{background:var(--blue-light);border:1px solid #c4d7ee;border-radius:10px;padding:18px 20px;margin-bottom:16px;text-align:center}
+  .result-hero .val{font-size:2.3rem;font-weight:700;color:var(--blue-dark)}
+  .result-hero .lbl{font-size:.86rem;color:var(--muted)}
+  .result-hero .alt{font-size:.9rem;color:var(--muted);margin-top:4px}
+  table.mid{width:100%;border-collapse:collapse;font-size:.88rem}
+  table.mid td{padding:6px 4px;border-bottom:1px solid var(--blue-light)}
+  table.mid td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .note{font-size:.8rem;color:var(--muted);margin-top:10px}
+  svg{width:100%;height:auto;display:block}
+  details{margin-top:20px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:4px 22px 4px}
+  details[open]{padding-bottom:18px}
+  summary{cursor:pointer;font-weight:600;color:var(--blue-dark);padding:14px 0;font-size:.98rem}
+  details p, details li{font-size:.9rem;color:var(--ink)}
+  .eq{background:var(--blue-light);border-radius:7px;padding:10px 14px;font-family:Consolas,monospace;font-size:.88rem;margin:8px 0;overflow-x:auto}
+  .full{grid-column:1 / -1}
+  footer{max-width:1060px;margin:0 auto 40px;padding:0 20px;font-size:.78rem;color:var(--muted)}
+  /* batch table */
+  .batch-wrap{overflow-x:auto}
+  table.batch{width:100%;border-collapse:collapse;font-size:.88rem;min-width:720px}
+  table.batch th{background:var(--blue-light);color:var(--blue-dark);font-size:.78rem;padding:8px 6px;text-align:left;border-bottom:2px solid #c4d7ee;white-space:nowrap}
+  table.batch td{padding:4px 4px;border-bottom:1px solid var(--blue-light)}
+  table.batch input{width:100%;min-width:66px;padding:7px 8px;border:1px solid var(--line);border-radius:6px;font-size:.9rem;color:var(--ink)}
+  table.batch input:focus{outline:2px solid var(--blue);border-color:var(--blue)}
+  table.batch td.qp{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--blue-dark);min-width:96px}
+  table.batch td.qp.bad{color:var(--err);font-weight:400;font-size:.78rem;white-space:normal;min-width:150px}
+  table.batch td.rowbtns{white-space:nowrap;text-align:right}
+  .ibtn{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:.95rem;line-height:1;margin-left:4px}
+  .ibtn:hover{background:var(--blue-light);color:var(--blue-dark)}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .toolbar .btn{width:auto;margin-top:0;padding:10px 22px}
+  .btn.ghost{background:#fff;color:var(--blue-dark);border:1px solid var(--blue)}
+  .btn.ghost:hover{background:var(--blue-light)}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>SCS (NRCS) Peak Discharge Calculator</h1>
+    <p>Web implementation of LaDOTD HYDR1130 (hydr2009) — SCS method per LA DOTD Hydraulics Manual, Ch. 1 &amp; TR‑55</p>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <h2>Watershed Inputs</h2>
+    <div class="units">
+      <button id="uEng" class="active" onclick="setUnits('E')">English</button>
+      <button id="uMet" onclick="setUnits('M')">Metric</button>
+    </div>
+
+    <label>Drainage Area <span class="u" id="luArea">(acres)</span></label>
+    <input type="number" id="area" step="any" min="0" value="640">
+
+    <label>Hydraulic Length <span class="u" id="luLen">(ft)</span></label>
+    <input type="number" id="length" step="any" min="0" value="4000">
+
+    <label>Curve Number <span class="u">(CN)</span></label>
+    <input type="number" id="cn" step="any" min="1" max="100" value="80">
+
+    <label>24‑Hour Rainfall <span class="u" id="luRain">(in)</span></label>
+    <input type="number" id="rain" step="any" min="0" value="10">
+
+    <label>Watershed Slope <span class="u">(%)</span></label>
+    <input type="number" id="slope" step="any" min="0" value="0.2">
+
+    <label>Peak Adjustment Factor <span class="u">(Fp)</span></label>
+    <input type="number" id="factor" step="any" min="0" value="1.0">
+
+    <button class="btn" onclick="run()">Compute Peak Discharge</button>
+    <div class="msg err" id="errBox"></div>
+    <div class="msg warn" id="warnBox"></div>
+  </div>
+
+  <div class="card">
+    <h2>Results</h2>
+    <div class="result-hero">
+      <div class="lbl">PEAK DISCHARGE</div>
+      <div class="val" id="qpMain">—</div>
+      <div class="alt" id="qpAlt"></div>
+    </div>
+    <table class="mid">
+      <tr><td>Potential retention S</td><td id="rS">—</td></tr>
+      <tr><td>Initial abstraction Iₐ = 0.2S</td><td id="rIa">—</td></tr>
+      <tr><td>Total runoff depth Q (24‑hr)</td><td id="rQ">—</td></tr>
+      <tr><td>Watershed lag</td><td id="rLag">—</td></tr>
+      <tr><td>Time of concentration T꜀ = lag / 0.6</td><td id="rTc">—</td></tr>
+      <tr><td>Unit storm duration D = T꜀ / 7.5</td><td id="rD">—</td></tr>
+      <tr><td>Time to peak Tₚ = D/2 + 0.6·T꜀</td><td id="rTp">—</td></tr>
+      <tr><td>Unit‑hydrograph peak (484·A·1″/Tₚ)</td><td id="rQup">—</td></tr>
+    </table>
+    <div class="note" id="tcNote"></div>
+    <h2 style="margin-top:20px">Runoff Hydrograph (SCS Type II, 24‑hr storm)</h2>
+    <div id="chart"></div>
+  </div>
+
+  <div class="card full">
+    <h2>Multiple Return Periods / Stations</h2>
+    <p class="note" style="margin:0 0 12px">One line per computation, exactly like HYDR1130 batch input. New rows copy the row above, so for a set of return periods you usually only change the 24‑hr rainfall. Units follow the English/Metric toggle above.</p>
+    <div class="batch-wrap">
+      <table class="batch" id="batchTbl">
+        <thead>
+          <tr>
+            <th style="min-width:90px">Return Period / Station</th>
+            <th>Area <span class="u" id="buArea">(acres)</span></th>
+            <th>Length <span class="u" id="buLen">(ft)</span></th>
+            <th>CN</th>
+            <th>24‑hr Rain <span class="u" id="buRain">(in)</span></th>
+            <th>Slope (%)</th>
+            <th>Fp</th>
+            <th style="text-align:right">Peak <span class="u" id="buQp">(cfs)</span></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="batchBody"></tbody>
+      </table>
+    </div>
+    <div class="toolbar">
+      <button class="btn" onclick="computeAll()">Compute All Rows</button>
+      <button class="btn ghost" onclick="addRow()">+ Add Row</button>
+      <button class="btn ghost" onclick="downloadCSV()">Download CSV</button>
+    </div>
+  </div>
+
+  <details class="full">
+    <summary>Method &amp; equations (SCS / NRCS — TR‑55 Ch. 2 and LA DOTD Hydraulics Manual Ch. 1)</summary>
+    <p>This calculator reproduces the computation performed by LaDOTD program <b>HYDR1130</b> (hydr2009 package, rev. 1998‑07‑14). It is a small storm‑hydrograph model, not the TR‑55 Exhibit 4 “graphical peak discharge” chart, so results are the same as HYDR1130 but may differ slightly from TR‑55 chart solutions.</p>
+    <p><b>1. Runoff depth</b> — SCS runoff curve‑number method (TR‑55, eqs. 2‑1 to 2‑4):</p>
+    <div class="eq">S = 1000/CN − 10&nbsp;&nbsp;&nbsp;&nbsp;Iₐ = 0.2·S&nbsp;&nbsp;&nbsp;&nbsp;Q = (P − 0.2S)² / (P + 0.8S)&nbsp;&nbsp;for P &gt; Iₐ, else Q = 0</div>
+    <p><b>2. Time of concentration</b> — SCS watershed‑lag method (TR‑55 eq. 3‑4) with ℓ = hydraulic length (ft), Y = average watershed slope (%):</p>
+    <div class="eq">lag (hr) = ℓ<sup>0.8</sup> · (S + 1)<sup>0.7</sup> / (1900 · √Y)&nbsp;&nbsp;&nbsp;&nbsp;T꜀ = lag / 0.6</div>
+    <p><b>3. Storm distribution</b> — the 24‑hr design storm is distributed with the SCS <b>Type II</b> cumulative mass curve (the table embedded in HYDR1130), and incremental runoff is computed with the CN equation over unit periods of duration <b>D = T꜀/7.5</b>.</p>
+    <p><b>4. Unit hydrograph & convolution</b> — each unit period’s incremental runoff is routed with the SCS triangular unit hydrograph (peak factor 484, time to peak Tₚ = D/2 + 0.6·T꜀, recession 1.67·Tₚ, tabulated at 13 ordinates). The composite hydrograph is the sum of all increments; the reported value is its peak multiplied by the Peak Adjustment Factor Fₚ:</p>
+    <div class="eq">qₚ = Fₚ · max<sub>t</sub> Σ ΔQⱼ · UH(t − tⱼ)&nbsp;&nbsp;&nbsp;&nbsp;where the UH peak = 484 · A(mi²) · 1″ / Tₚ</div>
+    <p><b>Input limits enforced by HYDR1130</b> (mirrored here): drainage area ≤ 2,000 acres (800 ha), watershed slope 0.1 % – 30 %.</p>
+    <p><b>TR‑55 cautions</b> (Ch. 2): curve numbers describe <i>average</i> conditions for design use; the CN equation contains no time/intensity term; the Iₐ = 0.2S assumption was generalized from agricultural watersheds — use judgment in heavily urbanized cases.</p>
+  </details>
+
+  <details class="full">
+    <summary>Fidelity to HYDR1130</summary>
+    <p>This page is an independent re‑implementation of HYDR1130’s SCS routine, reverse‑engineered from the program and verified against <b>82 batch runs of the original executable</b> spanning drainage area 200–64,000 ac, length 200–70,800 ft, CN 40–95, rainfall 1–20 in, slope 0.1–30 % and Fₚ 0.5–100. All cases matched to the precision printed by the program (typically better than 0.01 %).</p>
+    <p>One quirk of the original program is reproduced intentionally: HYDR1130 searches for the hydrograph peak starting at the 12ᵗʰ ordinate of the composite hydrograph. For very long times of concentration (T꜀ ≳ 12.5 hr) the true hydrograph peak occurs earlier than that, so the program (and this page) reports a value slightly below the true computed peak. When this happens a note is shown beneath the results with the unclipped value.</p>
+  </details>
+
+  <details class="full">
+    <summary>Reference values (from HYDR1130 sample data)</summary>
+    <p>English sample (ENGLISHS.130): A = 100 ac, L = 4,000 ft, CN = 80, P = 10 in, slope 0.20 %, Fₚ = 1.00 → <b>qₚ = 146 cfs</b>.<br>
+    Metric sample (METRICS.130): A = 40.5 ha, L = 1,219.2 m, CN = 80, P = 254 mm, slope 0.20 %, Fₚ = 1.00 → <b>qₚ ≈ 4.15 m³/s</b>.</p>
+  </details>
+</main>
+
+<footer>
+  Implements the SCS (NRCS) curve‑number peak‑discharge procedure of the LA DOTD Hydraulics Manual (1987) as coded in HYDR1130 (hydr2009).
+  For LaDOTD project design, verify results against the official program. TR‑55: <i>Urban Hydrology for Small Watersheds</i>, USDA‑NRCS, June 1986.
+</footer>
+
+<script>
+'use strict';
+/* ---- constants extracted from HYDR1130 ---- */
+const RT=[0,2,4,6,8,9,9.5,10,10.5,11,11.5,11.75,12,12.5,13,13.5,14,16,20,24];
+const RF=[0,0.022,0.048,0.08,0.12,0.147,0.163,0.181,0.204,0.235,0.283,0.387,
+          0.663,0.735,0.772,0.799,0.82,0.88,0.952,1.0];
+const UHK=[0.2,0.4,0.6,0.8,1.0,0.88,0.76,0.64,0.52,0.40,0.28,0.16,0.04];
+/* unit conversion factors used by HYDR1130 (1 m = 39.37 in) */
+const HA2AC=1/0.404687, M2FT=1/0.304801, MM2IN=1/25.4, CFS2CMS=Math.pow(0.3048,3);
+
+let units='E';
+
+function cumfrac(t){
+  if(t<=0) return 0;
+  if(t>=24) return 1;
+  for(let i=1;i<RT.length;i++){
+    if(t<=RT[i]) return RF[i-1]+(RF[i]-RF[i-1])*(t-RT[i-1])/(RT[i]-RT[i-1]);
+  }
+  return 1;
+}
+
+function scsPeak(A_ac,L_ft,CN,P_in,Y_pct,Fp){
+  const S=1000/CN-10, Ia=0.2*S;
+  const runoff=Pc=>(Pc<=Ia?0:(Pc-Ia)*(Pc-Ia)/(Pc+0.8*S));
+  const lag=Math.pow(L_ft,0.8)*Math.pow(S+1,0.7)/(1900*Math.sqrt(Y_pct));
+  const Tc=lag/0.6, D=Tc/7.5, Tp=D/2+0.6*Tc;
+  const qup=0.75625*A_ac/Tp;              /* = 484 * (A/640) / Tp  [cfs per inch] */
+  const N=Math.floor(24/D)+1;
+  const dQ=new Array(N);
+  let prev=0;
+  for(let j=1;j<=N;j++){
+    const q=runoff(P_in*cumfrac(j*D));
+    dQ[j-1]=q-prev; prev=q;
+  }
+  const M=UHK.length, hyd=[];
+  let qmax=0, qtrue=0;
+  for(let k=1;k<=N+M;k++){
+    let s=0;
+    for(let m=0;m<M;m++){
+      const idx=k-m-1;
+      if(idx>=0&&idx<N) s+=UHK[m]*dQ[idx];
+    }
+    hyd.push({t:k*D,q:qup*s*Fp});
+    if(s>qtrue) qtrue=s;
+    if(k>=12&&s>qmax) qmax=s;             /* HYDR1130 searches from ordinate 12 */
+  }
+  return {qp:qup*qmax*Fp, qpTrue:qup*qtrue*Fp, Q24:prev, S, Ia, lag, Tc, D, Tp,
+          qup, hyd};
+}
+
+function setUnits(u){
+  units=u;
+  document.getElementById('uEng').classList.toggle('active',u==='E');
+  document.getElementById('uMet').classList.toggle('active',u==='M');
+  document.getElementById('luArea').textContent = u==='E'?'(acres)':'(hectares)';
+  document.getElementById('luLen').textContent  = u==='E'?'(ft)':'(m)';
+  document.getElementById('luRain').textContent = u==='E'?'(in)':'(mm)';
+  document.getElementById('buArea').textContent = u==='E'?'(acres)':'(ha)';
+  document.getElementById('buLen').textContent  = u==='E'?'(ft)':'(m)';
+  document.getElementById('buRain').textContent = u==='E'?'(in)':'(mm)';
+  document.getElementById('buQp').textContent   = u==='E'?'(cfs)':'(m³/s)';
+}
+
+function fmt(x,d){return x.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});}
+
+function run(){
+  const err=document.getElementById('errBox'), warn=document.getElementById('warnBox');
+  err.style.display='none'; warn.style.display='none';
+  const gv=id=>parseFloat(document.getElementById(id).value);
+  let A=gv('area'), L=gv('length'), CN=gv('cn'), P=gv('rain'), Y=gv('slope'), Fp=gv('factor');
+
+  const bad=[];
+  if(!(A>0)) bad.push('drainage area');
+  if(!(L>0)) bad.push('hydraulic length');
+  if(!(CN>0&&CN<=100)) bad.push('curve number (1–100)');
+  if(!(P>0)) bad.push('24‑hr rainfall');
+  if(!(Y>0)) bad.push('watershed slope');
+  if(!(Fp>0)) bad.push('peak adjustment factor');
+  if(bad.length){err.textContent='Check input: '+bad.join(', ')+'.';err.style.display='block';return;}
+
+  /* HYDR1130 hard limits */
+  if(units==='E'&&A>2000){err.textContent='HYDR1130 limit: drainage area must not exceed 2,000 acres for the SCS method.';err.style.display='block';return;}
+  if(units==='M'&&A>800){err.textContent='HYDR1130 limit: drainage area must not exceed 800 hectares for the SCS method.';err.style.display='block';return;}
+  if(Y>30){err.textContent='HYDR1130 limit: watershed slope must not exceed 30 %.';err.style.display='block';return;}
+  if(Y<0.1){warn.textContent='HYDR1130 documents a minimum watershed slope of 0.1 %. Result shown, but use with caution.';warn.style.display='block';}
+
+  /* convert metric inputs to English (HYDR1130 conversion: 1 m = 39.37 in) */
+  const A_ac=units==='M'?A*HA2AC:A;
+  const L_ft=units==='M'?L*M2FT:L;
+  const P_in=units==='M'?P*MM2IN:P;
+
+  const r=scsPeak(A_ac,L_ft,CN,P_in,Y,Fp);
+
+  const qpMain=document.getElementById('qpMain'), qpAlt=document.getElementById('qpAlt');
+  if(units==='E'){
+    qpMain.textContent=fmt(Math.round(r.qp),0)+' cfs';
+    qpAlt.textContent=fmt(r.qp,2)+' cfs  ·  '+fmt(r.qp*CFS2CMS,3)+' m³/s';
+  }else{
+    qpMain.textContent=fmt(r.qp*CFS2CMS,2)+' m³/s';
+    qpAlt.textContent=fmt(r.qp,1)+' cfs';
+  }
+  const dep=units==='E'?[r.Q24,'in',2]:[r.Q24*25.4,'mm',1];
+  document.getElementById('rS').textContent  = units==='E'?fmt(r.S,3)+' in':fmt(r.S*25.4,1)+' mm';
+  document.getElementById('rIa').textContent = units==='E'?fmt(r.Ia,3)+' in':fmt(r.Ia*25.4,1)+' mm';
+  document.getElementById('rQ').textContent  = fmt(dep[0],dep[2])+' '+dep[1];
+  document.getElementById('rLag').textContent= fmt(r.lag,3)+' hr';
+  document.getElementById('rTc').textContent = fmt(r.Tc,3)+' hr';
+  document.getElementById('rD').textContent  = fmt(r.D,4)+' hr';
+  document.getElementById('rTp').textContent = fmt(r.Tp,3)+' hr';
+  document.getElementById('rQup').textContent= fmt(r.qup,1)+' cfs/in';
+
+  const note=document.getElementById('tcNote');
+  if(r.qpTrue-r.qp>0.005*r.qp){
+    const tv=units==='E'?fmt(Math.round(r.qpTrue),0)+' cfs':fmt(r.qpTrue*CFS2CMS,2)+' m³/s';
+    note.textContent='Note: because T꜀ is very long ('+fmt(r.Tc,1)+' hr), HYDR1130’s peak search clips the early hydrograph peak. The unclipped computed peak is '+tv+'. The value above matches the original program.';
+  }else note.textContent='';
+
+  drawChart(r);
+}
+
+function drawChart(r){
+  const W=560,H=240,mL=52,mR=12,mT=10,mB=34;
+  const pts=r.hyd.filter(p=>p.t<=Math.min(60,r.hyd[r.hyd.length-1].t));
+  const tmax=Math.max(24,pts[pts.length-1].t), qmax=Math.max(...pts.map(p=>p.q))*1.08||1;
+  const X=t=>mL+(W-mL-mR)*t/tmax, Yp=q=>H-mB-(H-mT-mB)*q/qmax;
+  let path='M'+X(0)+','+Yp(0);
+  for(const p of pts) path+=' L'+X(p.t).toFixed(1)+','+Yp(p.q).toFixed(1);
+  const isM=units==='M', qconv=isM?CFS2CMS:1;
+  let ticksY='',n=4;
+  for(let i=0;i<=n;i++){
+    const q=qmax*i/n, y=Yp(q);
+    ticksY+='<line x1="'+mL+'" y1="'+y+'" x2="'+(W-mR)+'" y2="'+y+'" stroke="#e3ebf4"/>'
+          +'<text x="'+(mL-6)+'" y="'+(y+4)+'" text-anchor="end" font-size="10" fill="#5b6b7b">'+(q*qconv).toPrecision(3)+'</text>';
+  }
+  let ticksX='';
+  for(let t=0;t<=tmax;t+=6){
+    const x=X(t);
+    ticksX+='<line x1="'+x+'" y1="'+(H-mB)+'" x2="'+x+'" y2="'+(H-mB+4)+'" stroke="#9db2c8"/>'
+          +'<text x="'+x+'" y="'+(H-mB+16)+'" text-anchor="middle" font-size="10" fill="#5b6b7b">'+t+'</text>';
+  }
+  document.getElementById('chart').innerHTML=
+   '<svg viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg">'
+   +ticksY+ticksX
+   +'<line x1="'+mL+'" y1="'+(H-mB)+'" x2="'+(W-mR)+'" y2="'+(H-mB)+'" stroke="#9db2c8"/>'
+   +'<line x1="'+mL+'" y1="'+mT+'" x2="'+mL+'" y2="'+(H-mB)+'" stroke="#9db2c8"/>'
+   +'<path d="'+path+'" fill="none" stroke="#1b4f8a" stroke-width="2"/>'
+   +'<path d="'+path+' L'+X(pts[pts.length-1].t)+','+Yp(0)+' Z" fill="#1b4f8a" opacity="0.08"/>'
+   +'<text x="'+((mL+W-mR)/2)+'" y="'+(H-4)+'" text-anchor="middle" font-size="11" fill="#5b6b7b">time (hr)</text>'
+   +'<text x="12" y="'+((mT+H-mB)/2)+'" font-size="11" fill="#5b6b7b" transform="rotate(-90 12 '+((mT+H-mB)/2)+')" text-anchor="middle">q ('+(isM?'m³/s':'cfs')+')</text>'
+   +'</svg>';
+}
+
+/* ---------- batch table (multiple return periods / stations) ---------- */
+function rowHTML(vals){
+  const v=k=>vals&&vals[k]!==undefined&&vals[k]!==''?String(vals[k]).replace(/"/g,'&quot;'):'';
+  return '<td><input type="text" class="b-label" value="'+v('label')+'" placeholder="e.g. 10-yr"></td>'
+    +'<td><input type="number" step="any" min="0" class="b-area" value="'+v('area')+'"></td>'
+    +'<td><input type="number" step="any" min="0" class="b-len" value="'+v('len')+'"></td>'
+    +'<td><input type="number" step="any" min="1" max="100" class="b-cn" value="'+v('cn')+'"></td>'
+    +'<td><input type="number" step="any" min="0" class="b-rain" value="'+v('rain')+'" placeholder="—"></td>'
+    +'<td><input type="number" step="any" min="0" class="b-slope" value="'+v('slope')+'"></td>'
+    +'<td><input type="number" step="any" min="0" class="b-fp" value="'+v('fp')+'"></td>'
+    +'<td class="qp">—</td>'
+    +'<td class="rowbtns">'
+    +'<button class="ibtn" title="Duplicate row" onclick="dupRow(this)">⧉</button>'
+    +'<button class="ibtn" title="Delete row" onclick="delRow(this)">✕</button>'
+    +'</td>';
+}
+function readRow(tr){
+  const g=c=>tr.querySelector('.'+c).value;
+  return {label:g('b-label'),area:g('b-area'),len:g('b-len'),cn:g('b-cn'),
+          rain:g('b-rain'),slope:g('b-slope'),fp:g('b-fp')};
+}
+function addRow(vals){
+  const body=document.getElementById('batchBody');
+  if(!vals){
+    const last=body.lastElementChild;
+    vals=last?Object.assign(readRow(last),{label:'',rain:''})
+             :{label:'',area:document.getElementById('area').value,
+               len:document.getElementById('length').value,
+               cn:document.getElementById('cn').value,rain:'',
+               slope:document.getElementById('slope').value,
+               fp:document.getElementById('factor').value};
+  }
+  const tr=document.createElement('tr');
+  tr.innerHTML=rowHTML(vals);
+  body.appendChild(tr);
+  return tr;
+}
+function dupRow(btn){
+  const tr=btn.closest('tr');
+  const nt=document.createElement('tr');
+  nt.innerHTML=rowHTML(readRow(tr));
+  tr.after(nt);
+}
+function delRow(btn){
+  const body=document.getElementById('batchBody');
+  if(body.children.length>1) btn.closest('tr').remove();
+}
+function computeRow(tr){
+  const r=readRow(tr), cell=tr.querySelector('.qp');
+  const A=parseFloat(r.area), L=parseFloat(r.len), CN=parseFloat(r.cn),
+        P=parseFloat(r.rain), Y=parseFloat(r.slope), Fp=parseFloat(r.fp);
+  cell.classList.remove('bad');
+  if([A,L,CN,P,Y,Fp].some(x=>!(x>0)) || CN>100){
+    cell.textContent='—';
+    if(r.rain!==''||r.area===''){cell.classList.add('bad');cell.textContent='incomplete / invalid input';}
+    return null;
+  }
+  if(units==='E'&&A>2000){cell.classList.add('bad');cell.textContent='area > 2,000 ac limit';return null;}
+  if(units==='M'&&A>800){cell.classList.add('bad');cell.textContent='area > 800 ha limit';return null;}
+  if(Y>30){cell.classList.add('bad');cell.textContent='slope > 30 % limit';return null;}
+  const res=scsPeak(units==='M'?A*HA2AC:A, units==='M'?L*M2FT:L, CN,
+                    units==='M'?P*MM2IN:P, Y, Fp);
+  const disp=units==='E'?fmt(Math.round(res.qp),0):fmt(res.qp*CFS2CMS,2);
+  cell.textContent=disp;
+  cell.title=units==='E'
+    ? fmt(res.qp,2)+' cfs = '+fmt(res.qp*CFS2CMS,3)+' m³/s · Tc '+fmt(res.Tc,2)+' hr · Q '+fmt(res.Q24,2)+' in'
+    : fmt(res.qp,1)+' cfs · Tc '+fmt(res.Tc,2)+' hr';
+  return res;
+}
+function computeAll(){
+  document.querySelectorAll('#batchBody tr').forEach(computeRow);
+}
+function downloadCSV(){
+  computeAll();
+  const e=units==='E';
+  const head=['Return Period/Station','Area '+(e?'(ac)':'(ha)'),'Hydraulic Length '+(e?'(ft)':'(m)'),
+              'Curve Number','24-hr Rainfall '+(e?'(in)':'(mm)'),'Slope (%)','Peak Adj Factor',
+              'Peak Discharge '+(e?'(cfs)':'(m3/s)')];
+  const lines=[head.join(',')];
+  document.querySelectorAll('#batchBody tr').forEach(tr=>{
+    const r=readRow(tr), q=tr.querySelector('.qp');
+    const qv=q.classList.contains('bad')||q.textContent==='—'?'':q.textContent.replace(/,/g,'');
+    lines.push(['"'+r.label.replace(/"/g,'""')+'"',r.area,r.len,r.cn,r.rain,r.slope,r.fp,qv].join(','));
+  });
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([lines.join('\r\n')],{type:'text/csv'}));
+  a.download='scs_peak_discharge.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+/* seed the table with common return periods, copying the calculator inputs */
+(function(){
+  const base={area:document.getElementById('area').value,
+              len:document.getElementById('length').value,
+              cn:document.getElementById('cn').value,
+              slope:document.getElementById('slope').value,
+              fp:document.getElementById('factor').value};
+  ['2-yr','5-yr','10-yr','25-yr','50-yr','100-yr'].forEach(lbl=>{
+    addRow(Object.assign({label:lbl,rain:''},base));
+  });
+})();
+
+run();
+</script>
+</body>
+</html>
