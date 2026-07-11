@@ -73,9 +73,14 @@
   .mapwrap svg{width:100%;height:auto;display:block;background:#fff}
   .marker{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
           background:rgba(220,30,30,.9);border:2.5px solid #fff;box-shadow:0 0 0 2px rgba(220,30,30,.9),0 1px 5px rgba(0,0,0,.4)}
-  .qchip{border:1px solid #d5e3f4;background:var(--tint);border-radius:9px;padding:9px 16px;text-align:center;font-size:.85rem}
-  .qchip small{display:block;color:var(--muted);font-size:.7rem;margin-bottom:1px;letter-spacing:.06em}
-  .qchip b{font-size:1.05rem;color:var(--accent-dark)}
+  .qbar{justify-content:space-around}
+  .qbar .q{text-align:center;padding:2px 6px}
+  .qbar .q small{display:block;color:var(--muted);font-size:.72rem;font-weight:600;letter-spacing:.1em;margin-bottom:1px}
+  .qbar .q b{font-size:1.35rem;font-weight:700;color:var(--accent-dark);white-space:nowrap}
+  /* region map */
+  .rg1{fill:#e7eff9} .rg2{fill:#c5d9ee} .rg3{fill:#9fc0e2}
+  .pp{stroke:#fff;stroke-width:1}
+  .pp.sel{stroke:var(--accent-dark);stroke-width:2}
 </style>
 </head>
 <body>
@@ -100,40 +105,48 @@
 <div id="nrcsPanel">
   <section>
     <h2>Location &amp; Design Rainfall</h2>
-    <div class="loc">
+    <div class="usgs-loc">
       <div>
-        <label>Louisiana Parish</label>
-        <select id="parishSel" onchange="parishChosen()"><option value="">— select —</option></select>
-      </div>
-      <div>
-        <label>or Coordinates <span class="u">(lat, lon)</span></label>
-        <div class="coordrow">
-          <input type="text" id="coords" placeholder="30.45, -91.15" onkeydown="if(event.key==='Enter')locate()">
-          <button class="btn ghost" onclick="locate()">Locate</button>
+        <div class="grid3" style="grid-template-columns:1fr 1fr">
+          <div>
+            <label>Louisiana Parish</label>
+            <select id="parishSel" onchange="parishChosen()"><option value="">— select —</option></select>
+          </div>
+          <div>
+            <label>or Coordinates <span class="u">(lat, lon)</span></label>
+            <div class="coordrow">
+              <input type="text" id="coords" placeholder="30.45, -91.15" onkeydown="if(event.key==='Enter')locate()">
+              <button class="btn ghost" onclick="locate()">Locate</button>
+            </div>
+          </div>
+          <div>
+            <label>Rainfall Region</label>
+            <select id="regionSel" onchange="regionChanged(true)">
+              <option value="">—</option>
+              <option value="1">Region 1</option>
+              <option value="2">Region 2</option>
+              <option value="3">Region 3</option>
+            </select>
+          </div>
+          <div>
+            <label>Duration</label>
+            <select id="durSel" onchange="regionChanged(false)">
+              <option value="6">6 hr</option>
+              <option value="12">12 hr</option>
+              <option value="24" selected>24 hr</option>
+            </select>
+          </div>
         </div>
+        <div class="msg err" id="locErr"></div>
+        <div class="regionline" id="regionBadge" style="display:none"></div>
+        <div class="chips" id="depthChips"></div>
+        <div class="hint" id="locHint">Pick a parish or enter coordinates to look up Table 3.4‑2 rainfall depths (region per Figure 3.4‑2). LaDOTD §3‑B.8.3 specifies the 24‑hour duration for the NRCS method. Click a depth to load it into the calculator; “Apply” fills the return‑period table.</div>
       </div>
       <div>
-        <label>Rainfall Region</label>
-        <select id="regionSel" onchange="regionChanged(true)">
-          <option value="">—</option>
-          <option value="1">Region 1</option>
-          <option value="2">Region 2</option>
-          <option value="3">Region 3</option>
-        </select>
-      </div>
-      <div>
-        <label>Duration</label>
-        <select id="durSel" onchange="regionChanged(false)">
-          <option value="6">6 hr</option>
-          <option value="12">12 hr</option>
-          <option value="24" selected>24 hr</option>
-        </select>
+        <div class="mapwrap" id="regionMapWrap"></div>
+        <div class="hint" style="text-align:center">Louisiana rainfall regions per Figure 3.4‑2 (LaDOTD Hydraulics Manual 2011)</div>
       </div>
     </div>
-    <div class="msg err" id="locErr"></div>
-    <div class="regionline" id="regionBadge" style="display:none"></div>
-    <div class="chips" id="depthChips"></div>
-    <div class="hint" id="locHint">Pick a parish or enter coordinates to look up Table 3.4‑2 rainfall depths (region per Figure 3.4‑2). LaDOTD §3‑B.8.3 specifies the 24‑hour duration for the NRCS method. Click a depth to load it into the calculator; “Apply” fills the return‑period table.</div>
   </section>
 
   <section>
@@ -244,7 +257,7 @@
 
   <section>
     <h2>Peak Discharge by Return Period</h2>
-    <div class="chips" id="uResults"></div>
+    <div class="resultbar qbar" id="uResults"></div>
     <div class="hint" id="uNote">Computed with the USGS regional regression equations as implemented in HYDR1130 (rural equations for small and large watersheds with the urban adjustment). Hover a value for the other unit system.</div>
   </section>
 </div><!-- /usgsPanel -->
@@ -511,9 +524,12 @@ function parishChosen(){
   document.getElementById('locErr').style.display='none';
   document.getElementById('coords').value='';
   const i=document.getElementById('parishSel').value;
-  if(i==='')return;
+  if(i===''){highlightParish(-1);placeRegionMarker(null);return;}
   const p=PARISH_GEO[+i];
   setRegion(p[1],p[0]);
+  highlightParish(+i);
+  const c=parishCentroid(+i);
+  placeRegionMarker(c[0],c[1]);
 }
 function locate(){
   const err=document.getElementById('locErr');
@@ -529,6 +545,8 @@ function locate(){
   const p=PARISH_GEO[hit.i];
   document.getElementById('parishSel').value=String(hit.i);
   setRegion(p[1],p[0]+(hit.exact?'':' (nearest)'));
+  highlightParish(hit.i);
+  placeRegionMarker(lon,lat);
 }
 function regionChanged(manual){
   if(manual){
@@ -537,6 +555,8 @@ function regionChanged(manual){
     b.style.display=v?'block':'none';
     if(v) b.innerHTML='Region <b>'+v+'</b> · set manually';
     document.getElementById('parishSel').value='';
+    highlightParish(-1);
+    placeRegionMarker(null);
   }
   renderDepths();
 }
@@ -738,7 +758,7 @@ function urun(){
   box.innerHTML=qs.map((q,i)=>{
     const main=units==='E'?fmt(Math.round(q),0)+' cfs':fmt(q*CFS2CMS,2)+' m³/s';
     const alt=units==='E'?fmt(q*CFS2CMS,2)+' m³/s':fmt(q,1)+' cfs';
-    return '<span class="qchip" title="'+alt+'"><small>Q'+RPS[i]+'</small><b>'+main+'</b></span>';
+    return '<div class="q" title="'+alt+'"><small>Q'+RPS[i]+'</small><b>'+main+'</b></div>';
   }).join('');
 }
 ['uarea','uslope','urain','ufactor'].forEach(id=>
@@ -780,6 +800,48 @@ function placeMarker(lon,lat){
   mk.style.display='';
 }
 drawIsoMap();
+
+/* ---- NRCS region map (Figure 3.4-2) from parish polygons ---- */
+function drawRegionMap(){
+  const W=mx(-88.55), H=my(28.75);
+  let s='<svg viewBox="0 0 '+W.toFixed(0)+' '+H.toFixed(0)+'" xmlns="http://www.w3.org/2000/svg" id="regionSvg">';
+  PARISH_GEO.forEach((p,i)=>{
+    let d='';
+    for(const ring of p[2]){
+      d+='M';
+      for(let k=0;k<ring.length;k+=2) d+=mx(ring[k]).toFixed(1)+','+my(ring[k+1]).toFixed(1)+' ';
+      d+='Z';
+    }
+    s+='<path id="pp'+i+'" class="pp rg'+p[1]+'" d="'+d+'"><title>'+p[0]+' Parish — Region '+p[1]+'</title></path>';
+  });
+  const lab=[[1,-92.75,30.55],[2,-92.35,31.95],[3,-93.82,32.45]];
+  for(const [v,lo,la] of lab){
+    s+='<text x="'+mx(lo).toFixed(1)+'" y="'+my(la).toFixed(1)+'" font-size="15" font-weight="700" fill="#123a68" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="4">REGION '+v+'</text>';
+  }
+  s+='<circle id="regionMarker" r="6" fill="rgba(220,30,30,.95)" stroke="#fff" stroke-width="2.5" style="display:none"/>';
+  s+='</svg>';
+  document.getElementById('regionMapWrap').innerHTML=s;
+}
+let selParish=-1;
+function highlightParish(i){
+  if(selParish>=0){const e=document.getElementById('pp'+selParish); if(e)e.classList.remove('sel');}
+  selParish=i;
+  if(i>=0){const e=document.getElementById('pp'+i); if(e)e.classList.add('sel');}
+}
+function placeRegionMarker(lon,lat){
+  const mk=document.getElementById('regionMarker');
+  if(lon===null){mk.style.display='none';return;}
+  mk.setAttribute('cx',mx(lon).toFixed(1));
+  mk.setAttribute('cy',my(lat).toFixed(1));
+  mk.style.display='';
+}
+function parishCentroid(i){
+  const ring=PARISH_GEO[i][2][0];
+  let sx=0,sy=0,n=0;
+  for(let k=0;k<ring.length;k+=2){sx+=ring[k];sy+=ring[k+1];n++;}
+  return [sx/n,sy/n];
+}
+drawRegionMap();
 /* units relabel for USGS panel */
 const _setUnits=setUnits;
 setUnits=function(u){
