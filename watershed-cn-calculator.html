@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watershed Curve Number Calculator — NRCS Method</title>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --paper:#F7F8F4;
+    --panel:#FFFFFF;
+    --ink:#1C2B33;
+    --ink-soft:#5B6B70;
+    --navy:#16323D;
+    --navy-2:#1F4553;
+    --teal:#3E7C82;
+    --teal-soft:#DCE9E7;
+    --sienna:#A6552C;
+    --sienna-soft:#F1E2D6;
+    --line:#D8D3C4;
+    --good:#3E7C4A;
+    --warn:#B4552B;
+    --bad:#B03A2E;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+    background:var(--paper);
+  }
+  h1,h2,h3{ font-family:'Spectral',serif; font-weight:600; margin:0; }
+  .mono{ font-family:'IBM Plex Mono',monospace; }
+
+  header{
+    background:var(--navy);
+    color:#EDEFE9;
+    padding:28px 32px 22px;
+    position:relative;
+    overflow:hidden;
+  }
+  header::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image:
+      repeating-radial-gradient(circle at 85% -10%, transparent 0 34px, rgba(255,255,255,0.045) 35px, rgba(255,255,255,0.045) 36px, transparent 37px);
+    pointer-events:none;
+  }
+  header .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:#8FB6BA;
+    margin-bottom:8px;
+  }
+  header h1{ font-size:26px; color:#fff; letter-spacing:.2px; }
+  header p{ margin:8px 0 0; max-width:680px; font-size:14px; line-height:1.55; color:#C7D3D2; }
+
+  .layout{
+    display:grid;
+    grid-template-columns: 420px 1fr;
+    gap:0;
+    min-height:calc(100vh - 128px);
+  }
+  @media (max-width: 980px){
+    .layout{ grid-template-columns: 1fr; }
+  }
+
+  .panel{
+    padding:22px 24px 60px;
+    border-right:1px solid var(--line);
+    background:var(--panel);
+    overflow-y:auto;
+  }
+  .mapcol{ position:relative; background:#e9ece6; }
+  #map{ height:100%; min-height:420px; }
+
+  .step{
+    margin-bottom:26px;
+    padding-bottom:22px;
+    border-bottom:1px solid var(--line);
+  }
+  .step:last-child{ border-bottom:none; }
+  .step-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+  .step-num{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--teal);
+    border:1px solid var(--teal);
+    border-radius:50%;
+    width:22px;height:22px;
+    display:flex;align-items:center;justify-content:center;
+    flex:none;
+  }
+  .step h2{ font-size:16px; }
+  .step .sub{ font-size:12.5px; color:var(--ink-soft); margin:4px 0 12px 32px; line-height:1.5; }
+
+  .btnrow{ display:flex; gap:8px; flex-wrap:wrap; margin-left:32px; }
+  button, .filebtn{
+    font-family:'Inter',sans-serif;
+    font-size:13px;
+    font-weight:500;
+    border:1px solid var(--navy-2);
+    background:#fff;
+    color:var(--navy-2);
+    padding:8px 13px;
+    border-radius:5px;
+    cursor:pointer;
+    transition:background .12s ease;
+  }
+  button:hover, .filebtn:hover{ background:var(--teal-soft); }
+  button.primary{
+    background:var(--sienna);
+    border-color:var(--sienna);
+    color:#fff;
+  }
+  button.primary:hover{ background:#8f4522; }
+  button.ghost{ border-color:var(--line); color:var(--ink-soft); }
+  button:disabled{ opacity:.45; cursor:not-allowed; }
+  input[type=file]{ display:none; }
+
+  .status{
+    margin:10px 0 0 32px;
+    font-size:12.5px;
+    padding:8px 10px;
+    border-radius:5px;
+    line-height:1.5;
+    display:none;
+  }
+  .status.show{ display:block; }
+  .status.info{ background:#EEF3F0; color:var(--ink-soft); border:1px solid var(--line);}
+  .status.success{ background:#E9F3EA; color:var(--good); border:1px solid #BFDCC3; }
+  .status.error{ background:#FBEDE9; color:var(--bad); border:1px solid #EFC4BA; }
+
+  .areabox{
+    margin:12px 0 0 32px;
+    display:flex; align-items:center; gap:8px;
+    font-size:13px;
+  }
+  .areabox input{
+    width:110px; padding:6px 8px; border:1px solid var(--line); border-radius:4px;
+    font-family:'IBM Plex Mono',monospace; font-size:13px;
+  }
+
+  table.comp{
+    width:calc(100% - 32px);
+    margin-left:32px;
+    border-collapse:collapse;
+    font-size:12.5px;
+  }
+  table.comp th{
+    text-align:left;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.05em;
+    color:var(--ink-soft);
+    border-bottom:1px solid var(--line);
+    padding:6px 4px;
+  }
+  table.comp td{
+    padding:5px 4px;
+    border-bottom:1px solid #ECE9DE;
+    vertical-align:middle;
+  }
+  table.comp select, table.comp input{
+    width:100%;
+    font-size:12px;
+    padding:4px 5px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    font-family:'Inter',sans-serif;
+    background:#fff;
+  }
+  table.comp input.pct{ width:56px; font-family:'IBM Plex Mono',monospace; }
+  table.comp .cn-cell{ font-family:'IBM Plex Mono',monospace; text-align:right; padding-right:8px; color:var(--navy-2); }
+  table.comp .rm{ cursor:pointer; color:var(--bad); border:none; background:none; font-size:15px; padding:0 4px; }
+  .hint{ font-size:10.5px; color:var(--teal); margin-top:2px; }
+
+  .composition-actions{ margin:10px 0 0 32px; display:flex; gap:8px; }
+
+  .resultbox{
+    margin:14px 32px 0 32px;
+    background:var(--navy);
+    color:#fff;
+    border-radius:8px;
+    padding:18px 20px;
+  }
+  .resultbox .label{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:#9FC1C4;
+  }
+  .resultbox .cn-value{
+    font-family:'Spectral',serif;
+    font-weight:700;
+    font-size:46px;
+    color:var(--sienna-soft);
+    line-height:1.1;
+    margin:4px 0 6px;
+  }
+  .resultbox .meta{ font-size:12px; color:#C7D3D2; line-height:1.6; }
+  .resultbox .meta b{ color:#fff; }
+
+  .badge{
+    display:inline-block;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px;
+    padding:2px 6px;
+    border-radius:3px;
+    background:var(--sienna-soft);
+    color:var(--sienna);
+    margin-left:6px;
+  }
+
+  .leaflet-top.leaflet-right{ top:12px; right:12px; }
+
+  footer{
+    background:var(--navy);
+    color:#9FB2AF;
+    font-size:11.5px;
+    text-align:center;
+    padding:14px;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  a{ color:var(--teal); }
+
+  datalist{ display:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">NRCS Method · SCS Curve Number</div>
+  <h1>Watershed Curve Number Calculator</h1>
+  <p>Draw a watershed boundary on the map (or upload a shapefile), build the soil / land-use composition, and get an area-weighted composite CN — using Louisiana hydrologic soil group data and the runoff CN table from the LADOTD Hydraulics Manual (2011), Tables 3‑B.6‑2 and 3‑B.7‑1, Antecedent Moisture Condition II.</p>
+</header>
+
+<div class="layout">
+
+  <div class="panel">
+
+    <!-- STEP 1 -->
+    <div class="step">
+      <div class="step-head"><div class="step-num">1</div><h2>Define the watershed</h2></div>
+      <div class="sub">Use the polygon tool on the map to trace the drainage boundary, or upload a shapefile (.zip containing .shp/.dbf/.shx/.prj).</div>
+      <div class="btnrow">
+        <label class="filebtn" for="shpUpload">Upload shapefile (.zip)</label>
+        <input type="file" id="shpUpload" accept=".zip">
+        <button id="clearBoundary" class="ghost">Clear boundary</button>
+      </div>
+      <div id="boundaryStatus" class="status"></div>
+      <div class="areabox">
+        <span>Watershed area:</span>
+        <input type="number" id="totalArea" step="0.01" placeholder="—"> <span>acres</span>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="step">
+      <div class="step-head"><div class="step-num">2</div><h2>Soil &amp; land-use composition</h2></div>
+      <div class="sub">Add one row per land-use / hydrologic-soil-group combination that makes up the watershed, with its share of total area. Type a Louisiana soil series name to auto-fill its hydrologic group (Table 3‑B.6‑2), or set the group directly.</div>
+
+      <div class="btnrow">
+        <button id="ssurgoLookup">Try live SSURGO lookup</button>
+        <button id="addRow" class="ghost">+ Add row</button>
+      </div>
+      <div id="ssurgoStatus" class="status"></div>
+
+      <table class="comp" id="compTable">
+        <thead>
+          <tr>
+            <th style="width:26%">Land use</th>
+            <th style="width:20%">Soil series (optional)</th>
+            <th style="width:10%">Group</th>
+            <th style="width:12%">Area %</th>
+            <th style="width:8%">CN</th>
+            <th style="width:4%"></th>
+          </tr>
+        </thead>
+        <tbody id="compBody"></tbody>
+      </table>
+      <div class="composition-actions">
+        <span class="hint" id="pctSum"></span>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="step">
+      <div class="step-head"><div class="step-num">3</div><h2>Composite curve number</h2></div>
+      <div class="btnrow"><button class="primary" id="calcBtn">Calculate CN</button></div>
+      <div class="resultbox" id="resultBox" style="display:none;">
+        <div class="label">Area-weighted composite CN</div>
+        <div class="cn-value" id="cnValue">—</div>
+        <div class="meta" id="cnMeta"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="mapcol">
+    <div id="map"></div>
+  </div>
+
+</div>
+
+<footer>
+  Methodology follows LADOTD Hydraulics Manual (2011) §3‑B — Tables 3‑B.6‑2 (Hydrologic Classification of Soils in Louisiana) and 3‑B.7‑1 (Runoff CN, AMC II). Verify soil composition against the authoritative
+  <a href="https://websoilsurvey.nrcs.usda.gov/app/WebSoilSurvey.aspx" target="_blank">Web Soil Survey</a> AOI report before final design use.
+</footer>
+
+<datalist id="soilSeriesList"></datalist>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/6.2.0/shp.min.js"></script>
+
+<script>
+/* ============================================================
+   DATA — LADOTD Hydraulics Manual (2011), Table 3-B.6-2
+   Louisiana soil series -> hydrologic soil group
+   ============================================================ */
+const SOIL_HYDRO_GROUP = {
+"Acadia":"D","Acy":"C","Alaga":"A","Allemands":"D","Alligator":"D",
+"Amagon":"D","Amite":"B","Anacoco":"D","Andry":"D","Angie":"C",
+"Armistead":"C","Baldwin":"D","Barbary":"D","Basile":"D","Beaumont":"D",
+"Beauregard":"C","Bennedale":"B","Bernaldo":"B","Bibb":"B/D","Bienville":"A",
+"Blaney":"B","Bonn":"D","Boswell":"D","Bowie":"B","Bruin":"B",
+"Bruno":"A","Bude":"C","Buxin":"D","Caddo":"D","Cadeville":"D",
+"Cahaba":"B","Calhoun":"D","Calloway":"C","Cane":"C","Carlin":"D",
+"Carroll":"D","Cascilla":"B","Caspiana":"B","Chastain":"D","Collins":"C",
+"Commerce":"D","Convent":"C","Coteau":"C","Coushatta":"B","Crevasse":"A",
+"Crowley":"D","Cuthbert":"C","Cypremort":"C","Darco":"A","Deerfield":"D",
+"Delcomb":"D","Dexter":"B","Dossman":"B","Dundee":"C","Duralde":"C",
+"Elysian":"B","Essex":"C","Eustis":"A","Eutaw":"D","Evangeline":"C",
+"Falaya":"D","Falkner":"C","Fausse":"D","Foley":"D","Forestdale":"D",
+"Fountain":"D","Fred":"C","Freeland":"C","Frizzell":"C","Frost":"D",
+"Gallion":"B","Galvez":"C","Gentilly":"D","Gilead":"C","Glenmora":"C",
+"Goldman":"C","Gore":"D","Grenada":"C","Guyan":"D","Hannahatchee":"C",
+"Harris":"D","Hebert":"C","Henry":"D","Hollywood":"D","Hortman":"D",
+"Houston":"D","Huckabee":"A","Iberia":"D","Ijam":"D","Independence":"A",
+"Iuka":"C","Izagora":"C","Jeanerette":"D","Jena":"B","Johnston":"B/D",
+"Kalmia":"B","Kaufman":"D","Kenner":"D","Kenny":"A","Keo":"B",
+"Kirvin":"C","Kisatchie":"D","Kolin":"C","Kullit":"B","Lafe":"D",
+"Lafitte":"D","Lakeland":"A","Latanier":"D","Leaf":"D","Lexington":"B",
+"Libuse":"C","Lintonia":"B","Loreauville":"C","Loring":"C","Lucy":"A",
+"Lufkin":"D","Luverne":"C","Malbis":"B","Mamou":"C","Mantachie":"C",
+"Mashulaville":"B/D","Maurepas":"D","Mayhew":"D","Mckamie":"D","Mclaurin":"B",
+"Memphis":"B","Mer rouge":"B","Messer":"C","Meth":"C","Mhoon":"D",
+"Midland":"D","Miller":"D","Moreland":"D","Morey":"D","Morse":"D",
+"Mowata":"D","Muskogee":"C","Myatt":"B/D","Nacogdoches":"B",
+"Natchitoches":"D","Newellton":"D","Norfolk":"B","Norwood":"B","Nugent":"A",
+"Ochlocknee":"B","Okenee":"D","Oktibbeha":"D","Oliver":"C","Ora":"C",
+"Orangeburg":"B","Osier":"B/D","Palm Beach":"A","Patoutville":"C","Pelham":"B/D",
+"Perry":"D","Pheba":"C","Placedo":"D","Pledger":"D","Portland":"D",
+"Prentiss":"C","Providence":"C","Ragley":"D","Red bay":"B","Rexor":"A",
+"Richland":"C","Rilla":"B","Robinsonville":"B","Roebuck":"D","Rosebloom":"D",
+"Roxana":"B","Ruston":"B","Sacul":"C","Savannah":"C",
+"Sawyer":"C","Scatlake":"D","Severn":"B","Sharkey":"D","Shatta":"C",
+"Shubuta":"C","Smithdale":"B","Springfield":"D","Sterlington":"B","Stough":"C",
+"Summerfield":"C","Sumter":"C","Susquehanna":"D","Tenot":"C","Tensas":"D",
+"Tilden":"B","Trebloc":"D","Tunica":"D","Una":"D","Urbo":"D",
+"Vacherie":"C","Vaiden":"D","Vacluse":"C","Verdun":"D","Verrett":"D",
+"Vicksburg":"B","Vidrine":"C","Waller":"B/D","Waverly":"B/D","Woodtell":"D",
+"Wrightsville":"D","Yahola":"B","Zachary":"D"
+};
+
+/* ============================================================
+   DATA — LADOTD Hydraulics Manual (2011), Table 3-B.7-1
+   Runoff CN for selected land uses, AMC II
+   ============================================================ */
+const CN_TABLE = [
+  {label:"Woods or forest land", A:37, B:61, C:74, D:80},
+  {label:"Pasture or range land", A:52, B:70, C:80, D:85},
+  {label:"Cultivated land", A:67, B:76, C:83, D:86},
+  {label:"Open space — good condition (grass ≥75% of area)", A:39, B:61, C:74, D:80},
+  {label:"Open space — fair condition (grass 50–75% of area)", A:49, B:69, C:79, D:84},
+  {label:"Open space — poor condition (grass <50% of area)", A:68, B:79, C:86, D:89},
+  {label:"Residential, 1/8-acre lots (65% impervious)", A:77, B:85, C:90, D:92},
+  {label:"Residential, 1/4-acre lots (38% impervious)", A:61, B:75, C:83, D:87},
+  {label:"Residential, 1/3-acre lots (30% impervious)", A:57, B:71, C:81, D:86},
+  {label:"Residential, 1/2-acre lots (25% impervious)", A:54, B:70, C:80, D:85},
+  {label:"Residential, 1-acre lots (20% impervious)", A:51, B:68, C:79, D:84},
+  {label:"Residential, 2-acre lots (12% impervious)", A:46, B:65, C:77, D:82},
+  {label:"Commercial and business area (85% impervious)", A:89, B:92, C:94, D:95},
+  {label:"Industrial districts (72% impervious)", A:81, B:88, C:91, D:93},
+  {label:"Paved parking lots, roofs, driveways (excl. ROW)", A:98, B:98, C:98, D:98},
+  {label:"Streets w/ curbs & storm drains (excl. ROW)", A:98, B:98, C:98, D:98},
+  {label:"Roads with open ditches (incl. ROW)", A:83, B:89, C:92, D:93},
+  {label:"Gravel roads (incl. ROW)", A:76, B:85, C:89, D:91},
+  {label:"Dirt roads (incl. ROW)", A:72, B:82, C:87, D:89}
+];
+
+// populate soil series datalist
+(function(){
+  const dl = document.getElementById('soilSeriesList');
+  Object.keys(SOIL_HYDRO_GROUP).sort().forEach(name=>{
+    const opt = document.createElement('option');
+    opt.value = name;
+    dl.appendChild(opt);
+  });
+})();
+
+/* ============================================================
+   MAP
+   ============================================================ */
+const map = L.map('map', {zoomControl:true}).setView([30.95, -91.9], 7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom:19,
+  attribution:'&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const drawnItems = new L.FeatureGroup().addTo(map);
+const drawControl = new L.Control.Draw({
+  edit:{ featureGroup: drawnItems, remove:false },
+  draw:{
+    polygon:{ allowIntersection:false, showArea:true, shapeOptions:{color:'#A6552C', weight:2} },
+    polyline:false, rectangle:false, circle:false, marker:false, circlemarker:false
+  }
+});
+map.addControl(drawControl);
+
+let currentPolygonLatLngs = null; // array of {lat,lng}
+
+map.on(L.Draw.Event.CREATED, function(e){
+  drawnItems.clearLayers();
+  drawnItems.addLayer(e.layer);
+  setBoundaryFromLayer(e.layer);
+});
+map.on(L.Draw.Event.EDITED, function(e){
+  e.layers.eachLayer(layer=> setBoundaryFromLayer(layer));
+});
+
+function setBoundaryFromLayer(layer){
+  const latlngs = layer.getLatLngs()[0];
+  currentPolygonLatLngs = latlngs.map(p=>({lat:p.lat, lng:p.lng}));
+  updateAreaFromPolygon();
+  setStatus('boundaryStatus', 'Boundary set. ' + currentPolygonLatLngs.length + ' vertices.', 'success');
+}
+
+function latlngsToGeoJSON(latlngs){
+  const coords = latlngs.map(p=>[p.lng, p.lat]);
+  if (coords.length && (coords[0][0]!==coords[coords.length-1][0] || coords[0][1]!==coords[coords.length-1][1])){
+    coords.push(coords[0]);
+  }
+  return {type:"Polygon", coordinates:[coords]};
+}
+
+function updateAreaFromPolygon(){
+  if(!currentPolygonLatLngs) return;
+  const gj = latlngsToGeoJSON(currentPolygonLatLngs);
+  const m2 = turf.area(gj);
+  const acres = m2 * 0.000247105381;
+  document.getElementById('totalArea').value = acres.toFixed(2);
+}
+
+document.getElementById('clearBoundary').addEventListener('click', ()=>{
+  drawnItems.clearLayers();
+  currentPolygonLatLngs = null;
+  document.getElementById('totalArea').value = '';
+  setStatus('boundaryStatus', '', 'info');
+  document.getElementById('boundaryStatus').classList.remove('show');
+});
+
+/* ---- Shapefile upload ---- */
+document.getElementById('shpUpload').addEventListener('change', function(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  setStatus('boundaryStatus', 'Reading shapefile…', 'info');
+  const reader = new FileReader();
+  reader.onload = function(e){
+    shp(e.target.result).then(geojson=>{
+      const fc = geojson.type === 'FeatureCollection' ? geojson : {type:'FeatureCollection', features:[geojson]};
+      if(!fc.features.length){ throw new Error('No features found in shapefile.'); }
+
+      // pick the largest polygon feature (by vertex-ring area) if multiple
+      let best = null, bestArea = -1;
+      fc.features.forEach(f=>{
+        let geom = f.geometry;
+        if(geom.type === 'MultiPolygon'){
+          geom.coordinates.forEach(poly=>{
+            const a = turf.area({type:"Polygon", coordinates:poly});
+            if(a>bestArea){ bestArea=a; best={type:"Polygon", coordinates:poly}; }
+          });
+        } else if(geom.type === 'Polygon'){
+          const a = turf.area(geom);
+          if(a>bestArea){ bestArea=a; best=geom; }
+        }
+      });
+      if(!best) throw new Error('No polygon geometry found in shapefile.');
+
+      drawnItems.clearLayers();
+      const layer = L.geoJSON(best, {style:{color:'#A6552C', weight:2}}).addTo(drawnItems);
+      map.fitBounds(layer.getBounds());
+
+      const ring = best.coordinates[0];
+      currentPolygonLatLngs = ring.map(c=>({lat:c[1], lng:c[0]}));
+      updateAreaFromPolygon();
+      setStatus('boundaryStatus', 'Shapefile loaded: ' + file.name, 'success');
+    }).catch(err=>{
+      console.error(err);
+      setStatus('boundaryStatus', 'Could not read shapefile — make sure the .zip contains .shp, .dbf and .prj files.', 'error');
+    });
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+function setStatus(id, msg, kind){
+  const el = document.getElementById(id);
+  if(!msg){ el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.className = 'status show ' + kind;
+}
+
+/* ============================================================
+   COMPOSITION TABLE
+   ============================================================ */
+let rowCounter = 0;
+function addRow(landUseIdx, group, pct, seriesName){
+  const id = 'row'+(rowCounter++);
+  const tbody = document.getElementById('compBody');
+  const tr = document.createElement('tr');
+  tr.id = id;
+
+  const luOptions = CN_TABLE.map((r,i)=>`<option value="${i}">${r.label}</option>`).join('');
+  const grpOptions = ['A','B','C','D'].map(g=>`<option value="${g}">${g}</option>`).join('');
+
+  tr.innerHTML = `
+    <td><select class="lu">${luOptions}</select></td>
+    <td><input class="series" list="soilSeriesList" placeholder="e.g. Norwood" autocomplete="off"></td>
+    <td>
+      <select class="grp">${grpOptions}</select>
+      <div class="hint dualhint" style="display:none;"></div>
+    </td>
+    <td><input class="pct" type="number" min="0" max="100" step="0.1" value="${pct||''}"></td>
+    <td class="cn-cell"><span class="cnout">—</span></td>
+    <td><button class="rm" title="Remove row">×</button></td>
+  `;
+  tbody.appendChild(tr);
+
+  const luSel = tr.querySelector('.lu');
+  const grpSel = tr.querySelector('.grp');
+  const seriesInput = tr.querySelector('.series');
+  const hint = tr.querySelector('.dualhint');
+
+  if(landUseIdx!==undefined) luSel.value = landUseIdx;
+  if(group) grpSel.value = group;
+  if(seriesName) seriesInput.value = seriesName;
+
+  seriesInput.addEventListener('input', ()=>{
+    const val = seriesInput.value.trim();
+    const match = Object.keys(SOIL_HYDRO_GROUP).find(n=>n.toLowerCase()===val.toLowerCase());
+    if(match){
+      const g = SOIL_HYDRO_GROUP[match];
+      if(g.includes('/')){
+        const [drained, undrained] = g.split('/');
+        grpSel.value = drained;
+        hint.style.display = 'block';
+        hint.textContent = `${match}: dual-rated ${g} — showing drained (${drained}). Set group to ${undrained} if undrained.`;
+      } else {
+        grpSel.value = g;
+        hint.style.display = 'none';
+      }
+      updateRowCN(tr);
+    } else {
+      hint.style.display = 'none';
+    }
+  });
+
+  [luSel, grpSel].forEach(el=> el.addEventListener('change', ()=>updateRowCN(tr)));
+  tr.querySelector('.pct').addEventListener('input', updatePctSum);
+  tr.querySelector('.rm').addEventListener('click', ()=>{ tr.remove(); updatePctSum(); });
+
+  updateRowCN(tr);
+  updatePctSum();
+}
+
+function updateRowCN(tr){
+  const luIdx = parseInt(tr.querySelector('.lu').value,10);
+  const grp = tr.querySelector('.grp').value;
+  const cn = CN_TABLE[luIdx][grp];
+  tr.querySelector('.cnout').textContent = cn;
+}
+
+function updatePctSum(){
+  const pcts = Array.from(document.querySelectorAll('#compBody .pct')).map(i=>parseFloat(i.value)||0);
+  const sum = pcts.reduce((a,b)=>a+b,0);
+  const el = document.getElementById('pctSum');
+  if(pcts.length===0){ el.textContent=''; return; }
+  el.textContent = `Rows total ${sum.toFixed(1)}% of watershed area` + (Math.abs(sum-100)>0.5 ? '  (adjust so this reads 100%)' : '  ✓');
+  el.style.color = Math.abs(sum-100)>0.5 ? 'var(--warn)' : 'var(--good)';
+}
+
+document.getElementById('addRow').addEventListener('click', ()=> addRow());
+// seed with one row
+addRow(0, 'B', 100);
+
+/* ============================================================
+   LIVE SSURGO LOOKUP (best effort — USDA Soil Data Access)
+   ============================================================ */
+function polygonToWKT(latlngs){
+  let coords = latlngs.map(p=>`${p.lng} ${p.lat}`);
+  if(coords[0] !== coords[coords.length-1]) coords.push(coords[0]);
+  return `POLYGON((${coords.join(', ')}))`;
+}
+
+document.getElementById('ssurgoLookup').addEventListener('click', async ()=>{
+  if(!currentPolygonLatLngs){
+    setStatus('ssurgoStatus', 'Draw or upload a watershed boundary first (Step 1).', 'error');
+    return;
+  }
+  setStatus('ssurgoStatus', 'Querying USDA Soil Data Access for map units intersecting your boundary…', 'info');
+  try{
+    const wkt = polygonToWKT(currentPolygonLatLngs);
+    const query = `SELECT mu.mukey, mu.muname, ma.hydgrpdcd FROM mapunit mu INNER JOIN muaggatt ma ON mu.mukey = ma.mukey WHERE mu.mukey IN (SELECT DISTINCT mukey FROM SDA_Get_Mukey_from_intersection_with_WktWgs84('${wkt}'))`;
+
+    const resp = await fetch('https://SDMDataAccess.sc.egov.usda.gov/Tabular/post.rest', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({query, format:'JSON+COLUMNNAME'})
+    });
+    if(!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if(!data.Table || data.Table.length < 2) throw new Error('No map units returned.');
+
+    const cols = data.Table[0];
+    const rows = data.Table.slice(1);
+    const mukeyIdx = cols.indexOf('mukey');
+    const munameIdx = cols.indexOf('muname');
+    const grpIdx = cols.indexOf('hydgrpdcd');
+
+    // clear existing rows, populate one per returned map unit, split area evenly as a starting point
+    document.getElementById('compBody').innerHTML = '';
+    const evenPct = (100 / rows.length).toFixed(1);
+    rows.forEach(r=>{
+      const grpRaw = (r[grpIdx] || 'B').toString().trim();
+      const grp = ['A','B','C','D'].includes(grpRaw) ? grpRaw : grpRaw.split('/')[0] || 'B';
+      addRow(0, grp, evenPct, null);
+      const lastRow = document.getElementById('compBody').lastElementChild;
+      lastRow.querySelector('.series').value = r[munameIdx] || '';
+      lastRow.querySelector('.series').placeholder = r[munameIdx] || '';
+    });
+
+    setStatus('ssurgoStatus',
+      `Found ${rows.length} SSURGO map unit(s) intersecting the boundary. Area % was split evenly as a placeholder — replace with the actual area weighting from the Web Soil Survey AOI "Soil Map" report, then set the land use for each row.`,
+      'success');
+  } catch(err){
+    console.error(err);
+    setStatus('ssurgoStatus',
+      'Live SSURGO lookup didn\'t go through — USDA\'s service usually blocks direct browser requests from other sites (CORS), so this is expected in most environments. Get the soil composition from Web Soil Survey manually and enter it in the table below (soil series name auto-fills the hydrologic group).',
+      'error');
+  }
+});
+
+/* ============================================================
+   CALCULATE COMPOSITE CN
+   ============================================================ */
+document.getElementById('calcBtn').addEventListener('click', ()=>{
+  const rows = Array.from(document.querySelectorAll('#compBody tr'));
+  if(!rows.length){ alert('Add at least one composition row.'); return; }
+
+  let totalPct = 0, weighted = 0;
+  const breakdown = [];
+  rows.forEach(tr=>{
+    const luIdx = parseInt(tr.querySelector('.lu').value,10);
+    const grp = tr.querySelector('.grp').value;
+    const pct = parseFloat(tr.querySelector('.pct').value) || 0;
+    const cn = CN_TABLE[luIdx][grp];
+    totalPct += pct;
+    weighted += pct * cn;
+    breakdown.push({label:CN_TABLE[luIdx].label, grp, pct, cn});
+  });
+
+  if(totalPct <= 0){ alert('Enter area percentages for at least one row.'); return; }
+
+  const compositeCN = weighted / totalPct; // normalizes even if rows don't sum exactly to 100
+  const totalAreaAc = parseFloat(document.getElementById('totalArea').value) || null;
+
+  document.getElementById('resultBox').style.display = 'block';
+  document.getElementById('cnValue').textContent = compositeCN.toFixed(1);
+
+  let metaHTML = `<b>${breakdown.length}</b> composition row(s), rows summed to <b>${totalPct.toFixed(1)}%</b> of area`;
+  if(Math.abs(totalPct-100) > 0.5){
+    metaHTML += ` <span style="color:#F1B999;">(normalized to 100% — adjust rows to total 100% for an exact area-weighted result)</span>`;
+  }
+  if(totalAreaAc){
+    metaHTML += `<br>Watershed area: <b>${totalAreaAc.toFixed(2)} acres</b>`;
+  }
+  metaHTML += `<br><br>` + breakdown.map(b=>
+    `${b.pct.toFixed(1)}% — ${b.label} <span class="mono">(Group ${b.grp}, CN ${b.cn})</span>`
+  ).join('<br>');
+  document.getElementById('cnMeta').innerHTML = metaHTML;
+
+  document.getElementById('resultBox').scrollIntoView({behavior:'smooth', block:'nearest'});
+});
+</script>
+</body>
+</html>
