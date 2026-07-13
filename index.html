@@ -89,15 +89,9 @@
     <h1>Louisiana Peak Discharge</h1>
     <p>Web implementation of LaDOTD HYDR1130</p>
   </div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap">
-    <div class="units">
-      <button id="mNrcs" class="active" onclick="setMethod('N')">NRCS (SCS)</button>
-      <button id="mUsgs" onclick="setMethod('U')">USGS</button>
-    </div>
-    <div class="units">
-      <button id="uEng" class="active" onclick="setUnits('E')">English</button>
-      <button id="uMet" onclick="setUnits('M')">Metric</button>
-    </div>
+  <div class="units">
+    <button id="mNrcs" class="active" onclick="setMethod('N')">NRCS (SCS)</button>
+    <button id="mUsgs" onclick="setMethod('U')">USGS</button>
   </div>
 </header>
 
@@ -207,6 +201,8 @@
       <button class="btn" onclick="computeAll()">Compute All</button>
       <button class="btn ghost" onclick="addRow()">+ Row</button>
       <button class="btn ghost" onclick="downloadCSV()">CSV</button>
+      <a class="btn ghost" href="https://youtu.be/dQw4w9WgXcQ" target="_blank" rel="noopener"
+         style="margin-left:auto;align-self:center;padding:5px 11px;font-size:.72rem;font-weight:500">▶ Video tutorial</a>
     </div>
   </section>
 </div><!-- /nrcsPanel -->
@@ -261,6 +257,7 @@
 
 <footer>
   Web implementation of LaDOTD HYDR1130 (hydr2009) and LA DOTD Hydraulics Manual rainfall data. Verify official submittals against the original program.
+  <span id="rrCount" style="display:block;margin-top:4px"></span>
 </footer>
 
 <script>
@@ -847,6 +844,25 @@ setUnits=function(u){
 };
 
 run();
+</script>
+
+<script>
+/* subtle rickroll counter — self-contained, independent of the calculator code */
+(function(){
+  const KEY='rrCount', el=document.getElementById('rrCount');
+  if(!el) return;
+  const get=()=>parseInt(localStorage.getItem(KEY)||'0',10)||0;
+  const render=()=>{ const n=get(); el.textContent = n+(n===1?' rickroll served.':' rickrolls served.'); };
+  const set=n=>{ localStorage.setItem(KEY,String(n)); render(); };
+  const vid=document.querySelector('a[href*="dQw4w9WgXcQ"]');
+  if(vid) vid.addEventListener('click',()=>set(get()+1));
+  let clicks=0, timer=null;                       /* 4 back-to-back clicks reset the counter */
+  el.addEventListener('click',()=>{
+    clicks++; clearTimeout(timer); timer=setTimeout(()=>{clicks=0;},600);
+    if(clicks>=4){ clicks=0; set(0); }
+  });
+  render();
+})();
 </script>
 </body>
 </html>
